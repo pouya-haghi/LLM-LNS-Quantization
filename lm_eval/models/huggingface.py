@@ -250,7 +250,7 @@ class HuggingFaceAutoLM(BaseLM):
         )
         # note: peft_path can be different than pretrained model path
         if peft is not None:
-            print("PEFT is called")
+            # print("PEFT is called")
             self.model = self._create_auto_model_peft(
                 model=self.model,
                 peft=peft,
