@@ -112,6 +112,7 @@ def simple_evaluate(
     # peft_model_id = "pouya-haghi/llama2_finetune_pile"
     # config = PeftConfig.from_pretrained(peft_model_id)
     # lm = PeftModel.from_pretrained(lm, peft_model_id)
+    print("lm", lm)
     # PH: end
 
     # PH: start (float8)
@@ -203,7 +204,7 @@ def simple_evaluate(
     # for name, module in lm.named_modules():
     #     if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
     #         module.register_forward_hook(activation_hook)
-     lm.model.layers[0].self_attn.q_proj.register_forward_hook(activation_hook)
+    # lm.model.layers[0].self_attn.q_proj.register_forward_hook(activation_hook)
     # PH: end
 
     task_dict = lm_eval.tasks.get_task_dict(tasks)
