@@ -75,7 +75,7 @@ def simple_evaluate(
     assert tasks != [], "No tasks specified"
 
     if isinstance(model, str):
-        print("You are in the correct branch")
+        # print("You are in the correct branch")
         if model_args is None:
             model_args = ""
         lm = lm_eval.models.get_model(model).create_from_arg_string(
