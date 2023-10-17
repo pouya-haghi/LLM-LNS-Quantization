@@ -363,7 +363,7 @@ class HuggingFaceAutoLM(BaseLM):
         num_frac = 3 # fractional bits for 8 bit repr.
 
         scale = float(2**num_frac)
-        threshold_clamp = 2**(num_bit_mantissa-1)
+        threshold_clamp = 2**(num_bit_mantissa)
         threshold_up = float(2**threshold_clamp)
         threshold_down = float(2**-(threshold_clamp))
 
