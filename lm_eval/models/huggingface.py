@@ -541,8 +541,8 @@ class HuggingFaceAutoLM(BaseLM):
                 if isinstance(input, tuple):
                     # Clone each tensor in the tuple
                     output = tuple(t.clone() for t in input)
-                    output = torch.where(t<0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)))-1)).unsqueeze(1)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)))-1)).unsqueeze(1)))
-                    output = (torch.round(t*(torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)))).unsqueeze(1))))/(torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)))).unsqueeze(1))
+                    output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)))-1)).unsqueeze(1)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)))-1)).unsqueeze(1))) for t in output)
+                    output = tuple((torch.round(t*(torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)))).unsqueeze(1))))/(torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)))).unsqueeze(1)) for t in output)
                     return output             
                 else:
                     output = input.clone()
@@ -558,10 +558,6 @@ class HuggingFaceAutoLM(BaseLM):
                     output = torch.where(output<0, -clamped_output, clamped_output)
                     output = (torch.round(output*scale.unsqueeze(1)))/scale.unsqueeze(1)
                     return output
-
-
-
-
 
             @staticmethod
             def backward(ctx, grad_output):
