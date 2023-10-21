@@ -363,7 +363,7 @@ class HuggingFaceAutoLM(BaseLM):
         # num_frac = 3 # fractional bits for 8 bit repr.
 
         # scale = float(2**num_frac)
-        # threshold_clamp = 2**(num_bit_mantissa)
+        # threshold_clamp = 2**(num_bit_mantissa-1)
         # threshold_up = float(2**threshold_clamp)
         # threshold_down = float(2**-(threshold_clamp))
 
@@ -518,7 +518,64 @@ class HuggingFaceAutoLM(BaseLM):
 
         # # PH: end
 
-        # PH: start (zeroquant) per-row quant for both activation and weights
+        # # PH: start (zeroquant) per-row quant for both activation and weights
+        # num_bit = 8
+
+        # # For keeping track of activations:
+        # # class ReferenceCounter:
+        # #     def __init__(self):
+        # #         self.count = 0
+        # #     def increase(self):
+        # #         self.count += 1
+        # #     def get_count(self):
+        # #         return self.count
+
+        # # counter = ReferenceCounter()
+        # # list_output_activation = {}
+
+        # class STEFunction_structured(torch.autograd.Function):
+        #     """ define straight through estimator with overrided gradient (gate) """
+        #     @staticmethod
+        #     def forward(ctx, input):
+        #         # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
+        #         if isinstance(input, tuple):
+        #             # Clone each tensor in the tuple
+        #             output = tuple(t.clone() for t in input)
+        #             output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1))) for t in output)
+        #             output = tuple((torch.round(t*(torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1))))/(torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1)) for t in output)
+        #             return output             
+        #         else:
+        #             output = input.clone()
+        #             max_values, _ = torch.max(torch.abs(output), dim=1) # it is now a vector, - is needed b/c otherwise torch.max returns both maximum values and indices of maximums
+        #             num_frac = torch.floor(torch.log2((2**(num_bit-1) - 1)/max_values)) # fractional bits for 8 bit repr.
+        #             num_bit_mantissa = num_bit -  num_frac # these are also vectors
+        #             scale = torch.pow(2, num_frac)
+        #             threshold_clamp = torch.pow(2, num_bit_mantissa-1)
+        #             threshold_up = torch.pow(2, threshold_clamp)
+        #             threshold_down = torch.pow(2, -(threshold_clamp))
+        #             # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
+        #             clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(1), max=threshold_up.unsqueeze(1))
+        #             output = torch.where(output<0, -clamped_output, clamped_output)
+        #             output = (torch.round(output*scale.unsqueeze(1)))/scale.unsqueeze(1)
+        #             return output
+
+        #     @staticmethod
+        #     def backward(ctx, grad_output):
+        #         grad_input = grad_output.clone()
+        #         return grad_input
+
+        # def activation_hook(module, input, output):
+        #     output = STEFunction_structured.apply(output)
+        #     return output
+
+        # EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
+
+        # for name, module in self.model.named_modules():
+        #     if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
+        #         module.register_forward_hook(activation_hook)
+        # # PH: end
+
+        # PH: start (W8A8) per-tensor quant for both activation and weights
         num_bit = 8
 
         # For keeping track of activations:
@@ -541,12 +598,12 @@ class HuggingFaceAutoLM(BaseLM):
                 if isinstance(input, tuple):
                     # Clone each tensor in the tuple
                     output = tuple(t.clone() for t in input)
-                    output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1))) for t in output)
-                    output = tuple((torch.round(t*(torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1))))/(torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1)) for t in output)
+                    output = tuple(torch.where(output<0, -torch.clamp(torch.abs(output), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(output))))-1))), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(output))))-1))), torch.clamp(torch.abs(output), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(output))))-1))), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(output))))-1)))) for t in output)
+                    output = tuple((torch.round(output*torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(output)))))))/torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(output))))) for t in output)
                     return output             
                 else:
                     output = input.clone()
-                    max_values, _ = torch.max(torch.abs(output), dim=1) # it is now a vector
+                    max_values = torch.max(torch.abs(output))
                     num_frac = torch.floor(torch.log2((2**(num_bit-1) - 1)/max_values)) # fractional bits for 8 bit repr.
                     num_bit_mantissa = num_bit -  num_frac # these are also vectors
                     scale = torch.pow(2, num_frac)
@@ -554,9 +611,9 @@ class HuggingFaceAutoLM(BaseLM):
                     threshold_up = torch.pow(2, threshold_clamp)
                     threshold_down = torch.pow(2, -(threshold_clamp))
                     # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
-                    clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(1), max=threshold_up.unsqueeze(1))
+                    clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
                     output = torch.where(output<0, -clamped_output, clamped_output)
-                    output = (torch.round(output*scale.unsqueeze(1)))/scale.unsqueeze(1)
+                    output = (torch.round(output*scale))/scale
                     return output
 
             @staticmethod
