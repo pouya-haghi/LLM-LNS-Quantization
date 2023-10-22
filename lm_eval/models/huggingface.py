@@ -632,7 +632,7 @@ class HuggingFaceAutoLM(BaseLM):
         #         module.register_forward_hook(activation_hook)
         # # PH: end
 
-        # # PH: start (smoothquant) per-row quant for both activation and weights
+        # # PH: start (smoothquant) scaling per column for activation and per row for weights. Then do a zeroquant.
         num_bit = 8
 
         # For keeping track of activations:
@@ -655,14 +655,20 @@ class HuggingFaceAutoLM(BaseLM):
                 if isinstance(input, tuple):
                     # Clone each tensor in the tuple
                     output = tuple(t.clone() for t in input)
+                    # First do scaling
+                    output = tuple(t/torch.sqrt(torch.max(torch.abs(t), dim=0)[0]).unsqueeze(0) for t in output)
+                    # now do zeroquant
                     output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1))) for t in output)
                     output = tuple((torch.round(t*torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1)))/torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1) for t in output)
+                    # Then scale back
                     output = tuple(t*torch.sqrt(torch.max(torch.abs(t), dim=0)[0]).unsqueeze(0) for t in output)
                     return output             
                 else:
                     output = input.clone()
+                    # First do scaling
                     max_val_c = torch.sqrt(torch.max(torch.abs(output), dim=0)[0]) # get max for each column
-                    output = output/max_val_c.unsqueeze(0) # now do scaling
+                    output = output/max_val_c.unsqueeze(0)
+                    # now do zeroquant
                     max_values = torch.max(torch.abs(output), dim=1)[0] # it is now a vector, - is needed b/c otherwise torch.max returns both maximum values and indices of maximums
                     num_frac = torch.floor(torch.log2((2**(num_bit-1) - 1)/max_values)) # fractional bits for 8 bit repr.
                     num_bit_mantissa = num_bit -  num_frac # these are also vectors
@@ -674,7 +680,8 @@ class HuggingFaceAutoLM(BaseLM):
                     clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(1), max=threshold_up.unsqueeze(1))
                     output = torch.where(output<0, -clamped_output, clamped_output)
                     output = (torch.round(output*scale.unsqueeze(1)))/scale.unsqueeze(1)
-                    output = output*max_val_c.unsqueeze(0) # now do scaling
+                    # Then scale back
+                    output = output*max_val_c.unsqueeze(0)
                     return output
 
             @staticmethod
