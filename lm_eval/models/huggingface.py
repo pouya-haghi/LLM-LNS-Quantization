@@ -705,7 +705,7 @@ class HuggingFaceAutoLM(BaseLM):
 
         # PH: start (LLM.int8())
         num_bit = 8
-        threshold = 6.0 # for outliers
+        threshold = 2.0 # for outliers
 
         # For keeping track of activations:
         # class ReferenceCounter:
