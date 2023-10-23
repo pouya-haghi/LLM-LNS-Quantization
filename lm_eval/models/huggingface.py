@@ -728,7 +728,7 @@ class HuggingFaceAutoLM(BaseLM):
                 if isinstance(input, tuple):
                     output = tuple(t.clone() for t in input)
                     # Keep high precision for columns with elements greater than 6.0
-                    output = tuple(torch.where(torch.any(torch.abs(t) > threshold, dim=0, keepdim=True), (torch.where(t<0, -torch.clamp(torch.abs(t), min=float(2**-(threshold_clamp_flp16)), max=float(2**threshold_clamp_flp16)), torch.clamp(torch.abs(t), min=float(2**-(threshold_clamp_flp16)), max=float(2**threshold_clamp_flp16))).to(torch.float16)).to(torch.float32), (torch.round(torch.where(t < 0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit - torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit - torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1))) * torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1))) / torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1)) for t in output)
+                    output = tuple(torch.where(torch.any(torch.abs(t) > threshold, dim=0, keepdim=True), t, (torch.round(torch.where(t < 0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit - torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit - torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1))) * torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1))) / torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1)) for t in output)
                     return output
                 else:
                     output = input.clone()
@@ -747,8 +747,8 @@ class HuggingFaceAutoLM(BaseLM):
                     clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(1), max=threshold_up.unsqueeze(1))
                     output_q = torch.where(output < 0, -clamped_output, clamped_output)
                     output_q = (torch.round(output_q * scale.unsqueeze(1))) / scale.unsqueeze(1)
-                    # Keep high precision (float16) for columns with elements greater than 6.0
-                    output_q = torch.where(mask_high_precision, (torch.where(output<0, -torch.clamp(torch.abs(output), min=float(2**-(threshold_clamp_flp16)), max=float(2**threshold_clamp_flp16)), torch.clamp(torch.abs(output), min=float(2**-(threshold_clamp_flp16)), max=float(2**threshold_clamp_flp16))).to(torch.float16)).to(torch.float32), output_q)
+                    # Keep high precision for columns with elements greater than 6.0
+                    output_q = torch.where(mask_high_precision, output, output_q)
                     return output_q
 
             @staticmethod
