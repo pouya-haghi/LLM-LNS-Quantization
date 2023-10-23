@@ -357,63 +357,63 @@ class HuggingFaceAutoLM(BaseLM):
         # # model.model.layers[0].self_attn.q_proj.register_forward_hook(activation_hook)
         # # # PH: end
 
-        # PH: start (LNS8)
-        num_bit_mantissa = 4 # for 8 bit repr.
-        # num_frac = 10 # fractional bits for 16 bit repr.
-        num_frac = 3 # fractional bits for 8 bit repr.
+        # # PH: start (LNS8)
+        # num_bit_mantissa = 4 # for 8 bit repr.
+        # # num_frac = 10 # fractional bits for 16 bit repr.
+        # num_frac = 3 # fractional bits for 8 bit repr.
 
-        scale = float(2**num_frac)
-        threshold_clamp = 2**(num_bit_mantissa-1)
-        threshold_up = float(2**threshold_clamp)
-        threshold_down = float(2**-(threshold_clamp))
+        # scale = float(2**num_frac)
+        # threshold_clamp = 2**(num_bit_mantissa-1)
+        # threshold_up = float(2**threshold_clamp)
+        # threshold_down = float(2**-(threshold_clamp))
 
-        # For keeping track of activations:
-        # class ReferenceCounter:
-        #     def __init__(self):
-        #         self.count = 0
-        #     def increase(self):
-        #         self.count += 1
-        #     def get_count(self):
-        #         return self.count
+        # # For keeping track of activations:
+        # # class ReferenceCounter:
+        # #     def __init__(self):
+        # #         self.count = 0
+        # #     def increase(self):
+        # #         self.count += 1
+        # #     def get_count(self):
+        # #         return self.count
 
-        # counter = ReferenceCounter()
-        # list_output_activation = {}
+        # # counter = ReferenceCounter()
+        # # list_output_activation = {}
 
-        class STEFunction_structured(torch.autograd.Function):
-            """ define straight through estimator with overrided gradient (gate) """
-            @staticmethod
-            def forward(ctx, input):
-                # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
-                if isinstance(input, tuple):
-                    # Clone each tensor in the tuple
-                    output = tuple(t.clone() for t in input)
-                    output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
-                    output = tuple(torch.where(t > 0, torch.pow(2,(torch.round(torch.log2(t)*scale))/scale), torch.where(t < 0, -torch.pow(2,(torch.round(torch.log2(-t)*scale)/scale)), t)) for t in output)
-                    return output             
-                else:
-                    output = input.clone()
-                    # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
-                    clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
-                    output = torch.where(output<0, -clamped_output, clamped_output)
-                    # v1: concise
-                    output = torch.where(output > 0, torch.pow(2,(torch.round(torch.log2(output)*scale))/scale), torch.where(output < 0, -torch.pow(2,(torch.round(torch.log2(-output)*scale)/scale)), output))
-                    return output
+        # class STEFunction_structured(torch.autograd.Function):
+        #     """ define straight through estimator with overrided gradient (gate) """
+        #     @staticmethod
+        #     def forward(ctx, input):
+        #         # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
+        #         if isinstance(input, tuple):
+        #             # Clone each tensor in the tuple
+        #             output = tuple(t.clone() for t in input)
+        #             output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
+        #             output = tuple(torch.where(t > 0, torch.pow(2,(torch.round(torch.log2(t)*scale))/scale), torch.where(t < 0, -torch.pow(2,(torch.round(torch.log2(-t)*scale)/scale)), t)) for t in output)
+        #             return output             
+        #         else:
+        #             output = input.clone()
+        #             # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
+        #             clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
+        #             output = torch.where(output<0, -clamped_output, clamped_output)
+        #             # v1: concise
+        #             output = torch.where(output > 0, torch.pow(2,(torch.round(torch.log2(output)*scale))/scale), torch.where(output < 0, -torch.pow(2,(torch.round(torch.log2(-output)*scale)/scale)), output))
+        #             return output
 
-            @staticmethod
-            def backward(ctx, grad_output):
-                grad_input = grad_output.clone()
-                return grad_input
+        #     @staticmethod
+        #     def backward(ctx, grad_output):
+        #         grad_input = grad_output.clone()
+        #         return grad_input
 
-        def activation_hook(module, input, output):
-            output = STEFunction_structured.apply(output)
-            return output
+        # def activation_hook(module, input, output):
+        #     output = STEFunction_structured.apply(output)
+        #     return output
 
-        EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
+        # EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
 
-        for name, module in self.model.named_modules():
-            if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
-                module.register_forward_hook(activation_hook)
-        # PH: end
+        # for name, module in self.model.named_modules():
+        #     if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
+        #         module.register_forward_hook(activation_hook)
+        # # PH: end
 
         # # PH: start (modified LNS8)
         # # num_bit_mantissa = 5 # for 16 bit repr.
@@ -702,6 +702,69 @@ class HuggingFaceAutoLM(BaseLM):
         #     if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
         #         module.register_forward_hook(activation_hook)
         # # # PH: end
+
+        # PH: start (LLM.int8())
+        num_bit = 8
+        num_bit_exponent_flp16 = 5
+        threshold_clamp_flp16 = 2**(num_bit_exponent_flp16-1)
+        threshold = 6.0 # for outliers
+
+        # For keeping track of activations:
+        # class ReferenceCounter:
+        #     def __init__(self):
+        #         self.count = 0
+        #     def increase(self):
+        #         self.count += 1
+        #     def get_count(self):
+        #         return self.count
+
+        # counter = ReferenceCounter()
+        # list_output_activation = {}
+
+        class STEFunction_structured(torch.autograd.Function):
+            @staticmethod
+            def forward(ctx, input):
+                # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
+                if isinstance(input, tuple):
+                    output = tuple(t.clone() for t in input)
+                    # Keep high precision for columns with elements greater than 6.0
+                    output = tuple(torch.where(torch.any(torch.abs(t) > threshold, dim=0, keepdim=True), (torch.where(t<0, -torch.clamp(torch.abs(t), min=float(2**-(threshold_clamp_flp16)), max=float(2**threshold_clamp_flp16)), torch.clamp(torch.abs(t), min=float(2**-(threshold_clamp_flp16)), max=float(2**threshold_clamp_flp16))).to(torch.float16)).to(torch.float32), (torch.round(torch.where(t < 0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit - torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit - torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1))) * torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1))) / torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1)) for t in output)
+                    return output
+                else:
+                    output = input.clone()
+                    max_values, _ = torch.max(torch.abs(output), dim=1)
+
+                    # Identify columns with at least one element greater than 6.0
+                    mask_high_precision = torch.any(torch.abs(output) > threshold, dim=0, keepdim=True)
+
+                    # Quantization for columns without elements greater than 6.0
+                    num_frac = torch.floor(torch.log2((2**(num_bit-1) - 1)/max_values))
+                    num_bit_mantissa = num_bit - num_frac
+                    scale = torch.pow(2, num_frac)
+                    threshold_clamp = torch.pow(2, num_bit_mantissa-1)
+                    threshold_up = torch.pow(2, threshold_clamp)
+                    threshold_down = torch.pow(2, -(threshold_clamp))
+                    clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(1), max=threshold_up.unsqueeze(1))
+                    output_q = torch.where(output < 0, -clamped_output, clamped_output)
+                    output_q = (torch.round(output_q * scale.unsqueeze(1))) / scale.unsqueeze(1)
+                    # Keep high precision (float16) for columns with elements greater than 6.0
+                    output_q = torch.where(mask_high_precision, (torch.where(output<0, -torch.clamp(torch.abs(output), min=float(2**-(threshold_clamp_flp16)), max=float(2**threshold_clamp_flp16)), torch.clamp(torch.abs(output), min=float(2**-(threshold_clamp_flp16)), max=float(2**threshold_clamp_flp16))).to(torch.float16)).to(torch.float32), output_q)
+                    return output_q
+
+            @staticmethod
+            def backward(ctx, grad_output):
+                grad_input = grad_output.clone()
+                return grad_input
+
+        def activation_hook(module, input, output):
+            output = STEFunction_structured.apply(output)
+            return output
+
+        EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
+        for name, module in self.model.named_modules():
+            if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
+                module.register_forward_hook(activation_hook)
+        # PH: end
 
         self.model.eval()
         torch.set_grad_enabled(False)
