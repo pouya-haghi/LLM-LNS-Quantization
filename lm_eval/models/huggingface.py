@@ -734,11 +734,11 @@ class HuggingFaceAutoLM(BaseLM):
                 else:
                     output = input.clone()
                     # max_values = torch.max(torch.abs(output), dim=1)[0]
-                    max_values = torch.max(torch.abs(output), dim=3)[0]
+                    max_values = torch.max(torch.abs(output), dim=2)[0]
                     max_values = torch.where(max_values==0, torch.tensor(0.0001), max_values) # VERY IMPORTANT: YOU NEED TO REPLACE ZEROS WITH ONES JUST IN CASE IF THE MAX WAS ZERO WHICH LEADS TO NAN
 
                     # Identify columns with at least one element greater than 6.0
-                    mask_high_precision = torch.any(torch.abs(output) > threshold, dim=2, keepdim=True)
+                    mask_high_precision = torch.any(torch.abs(output) > threshold, dim=1, keepdim=True)
 
                     # Quantization for columns without elements greater than 6.0
                     # num_frac = torch.floor(torch.log2((2**(num_bit-1) - 1)/max_values))
@@ -749,11 +749,11 @@ class HuggingFaceAutoLM(BaseLM):
                     threshold_up = torch.pow(2, threshold_clamp)
                     threshold_down = torch.pow(2, -(threshold_clamp))
                     # clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(1), max=threshold_up.unsqueeze(1))
-                    clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(3), max=threshold_up.unsqueeze(3))
+                    clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(2), max=threshold_up.unsqueeze(2))
                     output_q = torch.where(output < 0, -clamped_output, clamped_output)
                     output_q = torch.where(output == 0, torch.tensor(0.0), output_q)
                     # output_q = (torch.round(output_q * scale.unsqueeze(1))) / scale.unsqueeze(1)
-                    output_q = (torch.round(output_q * scale.unsqueeze(3))) / scale.unsqueeze(3)
+                    output_q = (torch.round(output_q * scale.unsqueeze(2))) / scale.unsqueeze(2)
                     # Keep high precision for columns with elements greater than 6.0
                     output_q = torch.where(mask_high_precision, output, output_q)
                     return output_q
