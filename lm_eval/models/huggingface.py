@@ -636,80 +636,7 @@ class HuggingFaceAutoLM(BaseLM):
         # PH: end
 
         # # PH: start (smoothquant) scaling per column for activation and per row for weights. Then do a zeroquant.
-        num_bit = 8
-
-        # For keeping track of activations:
-        # class ReferenceCounter:
-        #     def __init__(self):
-        #         self.count = 0
-        #     def increase(self):
-        #         self.count += 1
-        #     def get_count(self):
-        #         return self.count
-
-        # counter = ReferenceCounter()
-        # list_output_activation = {}
-
-        class STEFunction_structured(torch.autograd.Function):
-            """ define straight through estimator with overrided gradient (gate) """
-            @staticmethod
-            def forward(ctx, input):
-                # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
-                if isinstance(input, tuple):
-                    # Clone each tensor in the tuple
-                    output = tuple(t.clone() for t in input)
-                    # First do scaling
-                    # output = tuple(t/torch.max(torch.abs(t), dim=0)[0].unsqueeze(0) for t in output)
-                    output = tuple(t/torch.where(torch.max(torch.abs(t), dim=0)[0]==0, torch.tensor(1.0), torch.max(torch.abs(t), dim=0)[0]).unsqueeze(0) for t in output)
-                    # now do zeroquant
-                    output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1))) for t in output)
-                    output = tuple((torch.round(t*torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1)))/torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1) for t in output)
-                    # Then scale back
-                    # output = tuple(t*torch.max(torch.abs(t), dim=0)[0].unsqueeze(0) for t in output)
-                    output = tuple(t*torch.where(torch.max(torch.abs(t), dim=0)[0]==0, torch.tensor(1.0), torch.max(torch.abs(t), dim=0)[0]).unsqueeze(0) for t in output)
-                    return output             
-                else:
-                    output = input.clone()
-                    # First do scaling
-                    max_val_c = torch.max(torch.abs(output), dim=0)[0] # get max for each column
-                    max_val_c = torch.where(max_val_c==0, torch.tensor(1.0), max_val_c) # VERY IMPORTANT: YOU NEED TO REPLACE ZEROS WITH ONES JUST IN CASE IF THE MAX WAS ZERO WHICH LEADS TO NAN
-                    output = output/max_val_c.unsqueeze(0)
-                    # now do zeroquant
-                    max_values = torch.max(torch.abs(output), dim=1)[0] # it is now a vector, - is needed b/c otherwise torch.max returns both maximum values and indices of maximums
-                    num_frac = torch.floor(torch.log2((2**(num_bit-1) - 1)/max_values)) # fractional bits for 8 bit repr.
-                    num_bit_mantissa = num_bit -  num_frac # these are also vectors
-                    scale = torch.pow(2, num_frac)
-                    threshold_clamp = torch.pow(2, num_bit_mantissa-1)
-                    threshold_up = torch.pow(2, threshold_clamp)
-                    threshold_down = torch.pow(2, -(threshold_clamp))
-                    # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
-                    clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(1), max=threshold_up.unsqueeze(1))
-                    output = torch.where(output<0, -clamped_output, clamped_output)
-                    output = (torch.round(output*scale.unsqueeze(1)))/scale.unsqueeze(1)
-                    # Then scale back
-                    output = output*max_val_c.unsqueeze(0)
-                    return output
-
-            @staticmethod
-            def backward(ctx, grad_output):
-                grad_input = grad_output.clone()
-                return grad_input
-
-        def activation_hook(module, input, output):
-            output = STEFunction_structured.apply(output)
-            return output
-
-        EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
-
-        for name, module in self.model.named_modules():
-            if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
-                module.register_forward_hook(activation_hook)
-        # # # # PH: end
-
-        # # PH: start (LLM.int8())
-        # # Find columns that have at least an element larger than a threshold (6.0) and then keep it in high precision. Process and store in low-precision for the rest (row-wise activation and column-wise weights like zeroquant)
         # num_bit = 8
-        # threshold = 0.01 # for outliers
 
         # # For keeping track of activations:
         # # class ReferenceCounter:
@@ -724,44 +651,44 @@ class HuggingFaceAutoLM(BaseLM):
         # # list_output_activation = {}
 
         # class STEFunction_structured(torch.autograd.Function):
+        #     """ define straight through estimator with overrided gradient (gate) """
         #     @staticmethod
         #     def forward(ctx, input):
         #         # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
         #         if isinstance(input, tuple):
+        #             # Clone each tensor in the tuple
         #             output = tuple(t.clone() for t in input)
-        #             # Keep high precision for columns with elements greater than 6.0
-        #             # output = tuple(torch.where(torch.any(torch.abs(t) > threshold, dim=1, keepdim=True), t, (torch.round(torch.where(t < 0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=1)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=1)[0]))), min=0, max=num_bit)-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=1)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=1)[0]))), min=0, max=num_bit)-1)).unsqueeze(1)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=1)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=1)[0]))), min=0, max=num_bit)-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=1)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=1)[0]))), min=0, max=num_bit)-1)).unsqueeze(1))) * torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=1)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=1)[0]))), min=0, max=num_bit)).unsqueeze(1))) / torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=1)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=1)[0]))), min=0, max=num_bit)).unsqueeze(1)) for t in output)
-        #             # output = tuple(torch.where(torch.any(torch.abs(t) > threshold, dim=1, keepdim=True), t, (torch.round(torch.where(t < 0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1))).unsqueeze(2), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1)).unsqueeze(2)),  torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1))).unsqueeze(2), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1)).unsqueeze(2))) * torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)).unsqueeze(2))) / torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)).unsqueeze(2)) for t in output)
-        #             # output = tuple(torch.where(torch.any(torch.abs(t) > threshold, dim=1, keepdim=True), t, (torch.round(torch.where(t == 0, torch.tensor(0.0), torch.where(t < 0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1))).unsqueeze(2), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1)).unsqueeze(2)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1))).unsqueeze(2), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1)).unsqueeze(2)))) * torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)).unsqueeze(2))) / torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)).unsqueeze(2)) for t in output)
-        #             output = tuple(torch.where(torch.any(torch.abs(t) > threshold, dim=2, keepdim=True), t, (torch.round(torch.where(t == 0, torch.tensor(0.0), torch.where(t < 0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=3)[0]==0, torch.tensor(0.000001), torch.max(torch.abs(t), dim=3)[0]))), min=0, max=num_bit)-1))).unsqueeze(3), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=3)[0]==0, torch.tensor(0.000001), torch.max(torch.abs(t), dim=3)[0]))), min=0, max=num_bit)-1)).unsqueeze(3)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=3)[0]==0, torch.tensor(0.000001), torch.max(torch.abs(t), dim=3)[0]))), min=0, max=num_bit)-1))).unsqueeze(3), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=3)[0]==0, torch.tensor(0.000001), torch.max(torch.abs(t), dim=3)[0]))), min=0, max=num_bit)-1)).unsqueeze(3)))) * torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=3)[0]==0, torch.tensor(0.000001), torch.max(torch.abs(t), dim=3)[0]))), min=0, max=num_bit)).unsqueeze(3))) / torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=3)[0]==0, torch.tensor(0.000001), torch.max(torch.abs(t), dim=3)[0]))), min=0, max=num_bit)).unsqueeze(3)) for t in output)
-        #             return output
+        #             # First do scaling
+        #             # output = tuple(t/torch.max(torch.abs(t), dim=0)[0].unsqueeze(0) for t in output)
+        #             output = tuple(t/torch.where(torch.max(torch.abs(t), dim=0)[0]==0, torch.tensor(1.0), torch.max(torch.abs(t), dim=0)[0]).unsqueeze(0) for t in output)
+        #             # now do zeroquant
+        #             output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit -  torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))-1)).unsqueeze(1))) for t in output)
+        #             output = tuple((torch.round(t*torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1)))/torch.pow(2, torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.max(torch.abs(t), dim=1)[0]))).unsqueeze(1) for t in output)
+        #             # Then scale back
+        #             # output = tuple(t*torch.max(torch.abs(t), dim=0)[0].unsqueeze(0) for t in output)
+        #             output = tuple(t*torch.where(torch.max(torch.abs(t), dim=0)[0]==0, torch.tensor(1.0), torch.max(torch.abs(t), dim=0)[0]).unsqueeze(0) for t in output)
+        #             return output             
         #         else:
-        #             # IMPORTANT: INCREASE EACH DIM BY ONE. ALSO, INCREASE THE ARGUMENT OF UNSQUEEZE() BY ONE 
         #             output = input.clone()
-        #             # max_values = torch.max(torch.abs(output), dim=1)[0]
-        #             max_values = torch.max(torch.abs(output), dim=2)[0]
-        #             max_values = torch.where(max_values==0, torch.tensor(0.0001), max_values) # VERY IMPORTANT: YOU NEED TO REPLACE ZEROS WITH ONES JUST IN CASE IF THE MAX WAS ZERO WHICH LEADS TO NAN
-
-        #             # Identify columns with at least one element greater than 6.0
-        #             mask_high_precision = torch.any(torch.abs(output) > threshold, dim=1, keepdim=True)
-
-        #             # Quantization for columns without elements greater than 6.0
-        #             # num_frac = torch.floor(torch.log2((2**(num_bit-1) - 1)/max_values))
-        #             num_frac = torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/max_values)), min=0, max=num_bit)
-        #             num_bit_mantissa = num_bit - num_frac
+        #             # First do scaling
+        #             max_val_c = torch.max(torch.abs(output), dim=0)[0] # get max for each column
+        #             max_val_c = torch.where(max_val_c==0, torch.tensor(1.0), max_val_c) # VERY IMPORTANT: YOU NEED TO REPLACE ZEROS WITH ONES JUST IN CASE IF THE MAX WAS ZERO WHICH LEADS TO NAN
+        #             output = output/max_val_c.unsqueeze(0)
+        #             # now do zeroquant
+        #             max_values = torch.max(torch.abs(output), dim=1)[0] # it is now a vector, - is needed b/c otherwise torch.max returns both maximum values and indices of maximums
+        #             num_frac = torch.floor(torch.log2((2**(num_bit-1) - 1)/max_values)) # fractional bits for 8 bit repr.
+        #             num_bit_mantissa = num_bit -  num_frac # these are also vectors
         #             scale = torch.pow(2, num_frac)
         #             threshold_clamp = torch.pow(2, num_bit_mantissa-1)
         #             threshold_up = torch.pow(2, threshold_clamp)
         #             threshold_down = torch.pow(2, -(threshold_clamp))
-        #             # clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(1), max=threshold_up.unsqueeze(1))
-        #             clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(2), max=threshold_up.unsqueeze(2))
-        #             output_q = torch.where(output < 0, -clamped_output, clamped_output)
-        #             output_q = torch.where(output == 0, torch.tensor(0.0), output_q)
-        #             # output_q = (torch.round(output_q * scale.unsqueeze(1))) / scale.unsqueeze(1)
-        #             output_q = (torch.round(output_q * scale.unsqueeze(2))) / scale.unsqueeze(2)
-        #             # Keep high precision for columns with elements greater than 6.0
-        #             output_q = torch.where(mask_high_precision, output, output_q)
-        #             return output_q
+        #             # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
+        #             clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(1), max=threshold_up.unsqueeze(1))
+        #             output = torch.where(output<0, -clamped_output, clamped_output)
+        #             output = (torch.round(output*scale.unsqueeze(1)))/scale.unsqueeze(1)
+        #             # Then scale back
+        #             output = output*max_val_c.unsqueeze(0)
+        #             return output
 
         #     @staticmethod
         #     def backward(ctx, grad_output):
@@ -773,9 +700,82 @@ class HuggingFaceAutoLM(BaseLM):
         #     return output
 
         # EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
+
         # for name, module in self.model.named_modules():
         #     if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
         #         module.register_forward_hook(activation_hook)
+        # # # # PH: end
+
+        # # PH: start (LLM.int8())
+        # # Find columns that have at least an element larger than a threshold (6.0) and then keep it in high precision. Process and store in low-precision for the rest (row-wise activation and column-wise weights like zeroquant)
+        num_bit = 8
+        threshold = 0.01 # for outliers
+
+        # For keeping track of activations:
+        # class ReferenceCounter:
+        #     def __init__(self):
+        #         self.count = 0
+        #     def increase(self):
+        #         self.count += 1
+        #     def get_count(self):
+        #         return self.count
+
+        # counter = ReferenceCounter()
+        # list_output_activation = {}
+
+        class STEFunction_structured(torch.autograd.Function):
+            @staticmethod
+            def forward(ctx, input):
+                # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
+                if isinstance(input, tuple):
+                    output = tuple(t.clone() for t in input)
+                    # Keep high precision for columns with elements greater than 6.0
+                    # output = tuple(torch.where(torch.any(torch.abs(t) > threshold, dim=1, keepdim=True), t, (torch.round(torch.where(t < 0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=1)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=1)[0]))), min=0, max=num_bit)-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=1)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=1)[0]))), min=0, max=num_bit)-1)).unsqueeze(1)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=1)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=1)[0]))), min=0, max=num_bit)-1))).unsqueeze(1), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=1)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=1)[0]))), min=0, max=num_bit)-1)).unsqueeze(1))) * torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=1)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=1)[0]))), min=0, max=num_bit)).unsqueeze(1))) / torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=1)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=1)[0]))), min=0, max=num_bit)).unsqueeze(1)) for t in output)
+                    # output = tuple(torch.where(torch.any(torch.abs(t) > threshold, dim=1, keepdim=True), t, (torch.round(torch.where(t < 0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1))).unsqueeze(2), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1)).unsqueeze(2)),  torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1))).unsqueeze(2), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1)).unsqueeze(2))) * torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)).unsqueeze(2))) / torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)).unsqueeze(2)) for t in output)
+                    # output = tuple(torch.where(torch.any(torch.abs(t) > threshold, dim=1, keepdim=True), t, (torch.round(torch.where(t == 0, torch.tensor(0.0), torch.where(t < 0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1))).unsqueeze(2), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1)).unsqueeze(2)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1))).unsqueeze(2), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)-1)).unsqueeze(2)))) * torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)).unsqueeze(2))) / torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=2)[0]==0, torch.tensor(0.0001), torch.max(torch.abs(t), dim=2)[0]))), min=0, max=num_bit)).unsqueeze(2)) for t in output)
+                    output = tuple(torch.where(torch.any(torch.abs(t) > threshold, dim=2, keepdim=True), t, (torch.round(torch.where(t == 0, torch.tensor(0.0), torch.where(t < 0, -torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=3)[0]==0, torch.tensor(0.000001), torch.max(torch.abs(t), dim=3)[0]))), min=0, max=num_bit)-1))).unsqueeze(3), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=3)[0]==0, torch.tensor(0.000001), torch.max(torch.abs(t), dim=3)[0]))), min=0, max=num_bit)-1)).unsqueeze(3)), torch.clamp(torch.abs(t), min=torch.pow(2, -(torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=3)[0]==0, torch.tensor(0.000001), torch.max(torch.abs(t), dim=3)[0]))), min=0, max=num_bit)-1))).unsqueeze(3), max=torch.pow(2, torch.pow(2, num_bit - torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=3)[0]==0, torch.tensor(0.000001), torch.max(torch.abs(t), dim=3)[0]))), min=0, max=num_bit)-1)).unsqueeze(3)))) * torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=3)[0]==0, torch.tensor(0.000001), torch.max(torch.abs(t), dim=3)[0]))), min=0, max=num_bit)).unsqueeze(3))) / torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.max(torch.abs(t), dim=3)[0]==0, torch.tensor(0.000001), torch.max(torch.abs(t), dim=3)[0]))), min=0, max=num_bit)).unsqueeze(3)) for t in output)
+                    return output
+                else:
+                    # IMPORTANT: INCREASE EACH DIM BY ONE. ALSO, INCREASE THE ARGUMENT OF UNSQUEEZE() BY ONE 
+                    output = input.clone()
+                    # max_values = torch.max(torch.abs(output), dim=1)[0]
+                    max_values = torch.max(torch.abs(output), dim=2)[0]
+                    max_values = torch.where(max_values==0, torch.tensor(0.0001), max_values) # VERY IMPORTANT: YOU NEED TO REPLACE ZEROS WITH ONES JUST IN CASE IF THE MAX WAS ZERO WHICH LEADS TO NAN
+
+                    # Identify columns with at least one element greater than 6.0
+                    mask_high_precision = torch.any(torch.abs(output) > threshold, dim=1, keepdim=True)
+
+                    # Quantization for columns without elements greater than 6.0
+                    # num_frac = torch.floor(torch.log2((2**(num_bit-1) - 1)/max_values))
+                    num_frac = torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/max_values)), min=0, max=num_bit)
+                    num_bit_mantissa = num_bit - num_frac
+                    scale = torch.pow(2, num_frac)
+                    threshold_clamp = torch.pow(2, num_bit_mantissa-1)
+                    threshold_up = torch.pow(2, threshold_clamp)
+                    threshold_down = torch.pow(2, -(threshold_clamp))
+                    # clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(1), max=threshold_up.unsqueeze(1))
+                    clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(2), max=threshold_up.unsqueeze(2))
+                    output_q = torch.where(output < 0, -clamped_output, clamped_output)
+                    output_q = torch.where(output == 0, torch.tensor(0.0), output_q)
+                    # output_q = (torch.round(output_q * scale.unsqueeze(1))) / scale.unsqueeze(1)
+                    output_q = (torch.round(output_q * scale.unsqueeze(2))) / scale.unsqueeze(2)
+                    # Keep high precision for columns with elements greater than 6.0
+                    output_q = torch.where(mask_high_precision, output, output_q)
+                    return output_q
+
+            @staticmethod
+            def backward(ctx, grad_output):
+                grad_input = grad_output.clone()
+                return grad_input
+
+        def activation_hook(module, input, output):
+            output = STEFunction_structured.apply(output)
+            return output
+
+        EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
+        for name, module in self.model.named_modules():
+            if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
+                module.register_forward_hook(activation_hook)
         # # # PH: end
 
         self.model.eval()
