@@ -834,8 +834,7 @@ class HuggingFaceAutoLM(BaseLM):
                         model_kwargs[
                             "bnb_4bit_use_double_quant"
                         ] = bnb_4bit_use_double_quant
-            # model = self.AUTO_MODEL_CLASS.from_pretrained(
-            model = self.T5ForConditionalGeneration.from_pretrained(
+            model = self.AUTO_MODEL_CLASS.from_pretrained(
                 pretrained,
                 revision=revision + ("/" + subfolder if subfolder is not None else ""),
                 low_cpu_mem_usage=low_cpu_mem_usage,
