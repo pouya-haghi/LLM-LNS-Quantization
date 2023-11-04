@@ -1071,16 +1071,16 @@ class HuggingFaceAutoLM(BaseLM):
             def forward(ctx, input):
                 # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
                 if isinstance(input, tuple):
-                    print("Hi")
                     output = tuple(t.clone() for t in input)
                     output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
                     # output = tuple(torch.where(t > 0, torch.pow(2, torch.where(torch.log2(t)>torch.max(torch.log2(t))-5, torch.where(torch.log2(t)>torch.max(torch.log2(t))-3, torch.round(torch.log2(t) * scale_highest_prec)/ scale_highest_prec, torch.round(torch.log2(t) * scale_high_prec)/ scale_high_prec), torch.round(torch.log2(t) * scale_low_prec)/ scale_low_prec)), torch.where(t < 0, -torch.pow(2, torch.where(torch.log2(-t)>torch.max(torch.log2(-t))-5, torch.where(torch.log2(-t)>torch.max(torch.log2(-t))-3, torch.round(torch.log2(-t) * scale_highest_prec)/ scale_highest_prec, torch.round(torch.log2(-t) * scale_high_prec)/ scale_high_prec), torch.round(torch.log2(-t) * scale_low_prec)/ scale_low_prec)), t)) for t in output)
                     # output = tuple(torch.where(t > 0, torch.pow(4, torch.where((torch.log2(t)/2)>torch.max((torch.log2(t)/2))-4, torch.where((torch.log2(t)/2)>torch.max((torch.log2(t)/2))-3, torch.round((torch.log2(t)/2) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(t)/2) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(t)/2) * scale_low_prec)/ scale_low_prec)), torch.where(t < 0, -torch.pow(4, torch.where((torch.log2(-t)/2)>torch.max((torch.log2(-t)/2))-4, torch.where((torch.log2(-t)/2)>torch.max((torch.log2(-t)/2))-3, torch.round((torch.log2(-t)/2) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(-t)/2) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(-t)/2) * scale_low_prec)/ scale_low_prec)), t)) for t in output)                    
                     output = tuple(torch.where(t > 0, torch.pow(2, torch.where((torch.log2(t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-4, torch.where((torch.log2(t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-3, torch.round((torch.log2(t)) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(t)) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(t)) * scale_low_prec)/ scale_low_prec)), torch.where(t < 0, -torch.pow(2, torch.where((torch.log2(-t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-4, torch.where((torch.log2(-t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-3, torch.round((torch.log2(-t)) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(-t)) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(-t)) * scale_low_prec)/ scale_low_prec)), t)) for t in output)                    
+                    for t in output:
+                        print(t.shape)
                     return output
                 else:
                     output = input.clone()
-                    print(output.shape)
                     # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
                     clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
                     output = torch.where(output<0, -clamped_output, clamped_output)
@@ -1096,7 +1096,7 @@ class HuggingFaceAutoLM(BaseLM):
                         quant_exponent_high_prec = torch.round(log_x * scale_high_prec)/ scale_high_prec # 2**3 - round(+ 0.5)
                         # --------  v3 (including extreme outliers) ---------
                         quant_exponent_highest_prec = torch.round(log_x * scale_highest_prec)/ scale_highest_prec # 2**3 - round(+ 0.5)
-                        max_val = torch.max(log_x)
+                        max_val = torch.max(log_x, dim=1).values.unsqueeze(1).expand_as(log_x)
                         quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
                         # ------- end v3 ---------
                         quantized_values = torch.where(non_zero_values > 0, torch.pow(2, quant_exponent), -(torch.pow(2, quant_exponent)))
@@ -1110,7 +1110,7 @@ class HuggingFaceAutoLM(BaseLM):
                         quant_exponent_high_prec = torch.round(log_x * scale_high_prec) / scale_high_prec # 2**3 - round(+ 0.5)
                         # --------  v3 (including extreme outliers) ---------
                         quant_exponent_highest_prec = torch.round(log_x * scale_highest_prec)/ scale_highest_prec # 2**3 - round(+ 0.5)
-                        max_val = torch.max(log_x)
+                        max_val = torch.max(log_x, dim=0).values.unsqueeze(0).expand_as(log_x)
                         quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
                         # ------- end v3 ---------
                         quantized_values = torch.where(non_zero_values > 0, torch.pow(2, quant_exponent), -(torch.pow(2, quant_exponent)))
