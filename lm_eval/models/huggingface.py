@@ -1081,7 +1081,7 @@ class HuggingFaceAutoLM(BaseLM):
                     output = input.clone()
                     # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
                     clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
-                    output = torch.where(output<0, -clamped_output, clamped_output)
+                    output = torch.where(output<0, -clamped_output, torch.where(output>0, clamped_output, output))
                     # v3:
                     log_x = torch.where(output<0, torch.log2(-output), torch.where(output > 0, torch.log2(output), torch.tensor(-64000.0)))
                     quant_exponent_low_prec = torch.round(log_x * scale_low_prec)/ scale_low_prec # 2**3 - round(+ 0.5)
