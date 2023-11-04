@@ -1078,7 +1078,7 @@ class HuggingFaceAutoLM(BaseLM):
                     output = tuple(torch.where(t > 0, torch.pow(2, torch.where((torch.log2(t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-4, torch.where((torch.log2(t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-3, torch.round((torch.log2(t)) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(t)) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(t)) * scale_low_prec)/ scale_low_prec)), torch.where(t < 0, -torch.pow(2, torch.where((torch.log2(-t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-4, torch.where((torch.log2(-t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-3, torch.round((torch.log2(-t)) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(-t)) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(-t)) * scale_low_prec)/ scale_low_prec)), t)) for t in output)              
                     print("Hi")
                     for t in output:
-                        print(output.shape)
+                        print(t.shape)
                     return output
                 else:
                     print("Bye")
