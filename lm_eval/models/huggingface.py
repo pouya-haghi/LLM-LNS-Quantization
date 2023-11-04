@@ -1081,6 +1081,7 @@ class HuggingFaceAutoLM(BaseLM):
                         print(t.shape)
                     return output
                 else:
+                    print(input.shape)
                     print("Bye")
                     # output = input.clone()
                     # # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
