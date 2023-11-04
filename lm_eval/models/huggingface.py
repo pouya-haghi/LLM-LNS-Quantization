@@ -1083,7 +1083,7 @@ class HuggingFaceAutoLM(BaseLM):
                     clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
                     output = torch.where(output<0, -clamped_output, clamped_output)
                     # v3:
-                    log_x = torch.where(output<0, torch.log2(-non_zero_values), output > 0, torch.log2(non_zero_values), torch.tensor(-64000.0))
+                    log_x = torch.where(output<0, torch.log2(-output), output > 0, torch.log2(output), torch.tensor(-64000.0))
                     quant_exponent_low_prec = torch.round(log_x * scale_low_prec)/ scale_low_prec # 2**3 - round(+ 0.5)
                     quant_exponent_high_prec = torch.round(log_x * scale_high_prec)/ scale_high_prec # 2**3 - round(+ 0.5)
                     quant_exponent_highest_prec = torch.round(log_x * scale_highest_prec)/ scale_highest_prec # 2**3 - round(+ 0.5)
