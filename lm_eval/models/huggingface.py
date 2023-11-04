@@ -1096,6 +1096,7 @@ class HuggingFaceAutoLM(BaseLM):
                         quant_exponent_high_prec = torch.round(log_x * scale_high_prec)/ scale_high_prec # 2**3 - round(+ 0.5)
                         # --------  v3 (including extreme outliers) ---------
                         quant_exponent_highest_prec = torch.round(log_x * scale_highest_prec)/ scale_highest_prec # 2**3 - round(+ 0.5)
+                        print(log_x.shape)
                         max_val = torch.max(log_x, dim=1).values.unsqueeze(1).expand_as(log_x)
                         quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
                         # ------- end v3 ---------
