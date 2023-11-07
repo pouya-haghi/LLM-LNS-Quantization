@@ -688,6 +688,7 @@ class HuggingFaceAutoLM(BaseLM):
         for name, module in self.model.named_modules():
             if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
                 module.register_forward_hook(activation_hook)
+                break
         # PH: end
 
         # # # PH: start (zeroquant) per-row quant for both activation and weights
