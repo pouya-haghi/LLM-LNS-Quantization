@@ -266,7 +266,7 @@ class HuggingFaceAutoLM(BaseLM):
         # # PH: end
 
         # # PH: start (pre-processing) finding # of times that inference is called.
-        For keeping track of activations:
+        # # For keeping track of activations:
         class ReferenceCounter:
             def __init__(self):
                 self.count = 0
