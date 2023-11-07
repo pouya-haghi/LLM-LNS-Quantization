@@ -611,6 +611,8 @@ class HuggingFaceAutoLM(BaseLM):
                 # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
                 if isinstance(input, tuple):
                     output = tuple(t.clone() for t in input)
+                    for t in output:
+                        print(t.shape)
                     output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
                     # output = tuple(torch.where(t > 0, torch.pow(2, torch.where(torch.log2(t)>torch.max(torch.log2(t))-5, torch.where(torch.log2(t)>torch.max(torch.log2(t))-3, torch.round(torch.log2(t) * scale_highest_prec)/ scale_highest_prec, torch.round(torch.log2(t) * scale_high_prec)/ scale_high_prec), torch.round(torch.log2(t) * scale_low_prec)/ scale_low_prec)), torch.where(t < 0, -torch.pow(2, torch.where(torch.log2(-t)>torch.max(torch.log2(-t))-5, torch.where(torch.log2(-t)>torch.max(torch.log2(-t))-3, torch.round(torch.log2(-t) * scale_highest_prec)/ scale_highest_prec, torch.round(torch.log2(-t) * scale_high_prec)/ scale_high_prec), torch.round(torch.log2(-t) * scale_low_prec)/ scale_low_prec)), t)) for t in output)
                     # output = tuple(torch.where(t > 0, torch.pow(4, torch.where((torch.log2(t)/2)>torch.max((torch.log2(t)/2))-4, torch.where((torch.log2(t)/2)>torch.max((torch.log2(t)/2))-3, torch.round((torch.log2(t)/2) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(t)/2) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(t)/2) * scale_low_prec)/ scale_low_prec)), torch.where(t < 0, -torch.pow(4, torch.where((torch.log2(-t)/2)>torch.max((torch.log2(-t)/2))-4, torch.where((torch.log2(-t)/2)>torch.max((torch.log2(-t)/2))-3, torch.round((torch.log2(-t)/2) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(-t)/2) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(-t)/2) * scale_low_prec)/ scale_low_prec)), t)) for t in output)                    
@@ -619,6 +621,7 @@ class HuggingFaceAutoLM(BaseLM):
                     return output
                 else:
                     output = input.clone()
+                    print(output.shape)
                     # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
                     clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
                     output = torch.where(output<0, -clamped_output, clamped_output)
