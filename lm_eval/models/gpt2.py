@@ -3,6 +3,10 @@ import transformers
 from typing import Optional, Union
 from lm_eval.base import BaseLM
 
+from peft import PeftModel, PeftConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch.nn as nn
+
 
 def _get_dtype(dtype: Union[str, torch.dtype]) -> torch.dtype:
     """Converts `dtype` from `str` to torch.dtype when possible. Does not use an instantiated HF AutoConfig"""
