@@ -1862,6 +1862,9 @@ class AutoSeq2SeqLM(HuggingFaceAutoLM):
         input_ids = inputs["input_ids"][:, -self.max_length :].to(self.device)
         attention_mask = inputs["attention_mask"][:, -self.max_length :].to(self.device)
 
+        print("Hi2")
+        print("Bye2")
+
         # Generate one token to calculate the number of start tokens prepended to decoder_input_ids
         # (leaving this here in case the below assumption is violated in the future)
         # one_tok_gen = self.model.generate(
