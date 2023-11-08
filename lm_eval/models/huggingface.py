@@ -324,7 +324,7 @@ class HuggingFaceAutoLM(BaseLM):
             if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
                 module.register_forward_hook(activation_hook)
                 break
-        self.model.model.layers[0].self_attn.q_proj.register_forward_hook(activation_hook)
+        # self.model.model.layers[0].self_attn.q_proj.register_forward_hook(activation_hook)
         # # # PH: end
 
         # # PH: start (float8)
