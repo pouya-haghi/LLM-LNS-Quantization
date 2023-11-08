@@ -75,6 +75,9 @@ class HFLM(BaseLM):
                 )
             revision = revision + ("/" + subfolder if subfolder is not None else "")
 
+            print("Hi3")
+            print("Bye3")
+
             # PH: start
             # Initialize new model and tokenizer instances
             self.model = transformers.AutoModelForCausalLM.from_pretrained(

@@ -1710,7 +1710,6 @@ class AutoCausalLM(HuggingFaceAutoLM):
         stopping_criteria = stop_sequences_criteria(
             self.tokenizer, stop, input_ids.shape[1], input_ids.shape[0]
         )
-        print("Hi")
         generations = self.model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1721,7 +1720,6 @@ class AutoCausalLM(HuggingFaceAutoLM):
             stopping_criteria=stopping_criteria,
             do_sample=False,
         )
-        print("Bye")
         return utils.select_continuation_from_batch_left_padding(
             generations, max_context_size=inputs["input_ids"].size(1)
         )
@@ -1861,9 +1859,6 @@ class AutoSeq2SeqLM(HuggingFaceAutoLM):
     ) -> TokenSequence:
         input_ids = inputs["input_ids"][:, -self.max_length :].to(self.device)
         attention_mask = inputs["attention_mask"][:, -self.max_length :].to(self.device)
-
-        print("Hi2")
-        print("Bye2")
 
         # Generate one token to calculate the number of start tokens prepended to decoder_input_ids
         # (leaving this here in case the below assumption is violated in the future)
