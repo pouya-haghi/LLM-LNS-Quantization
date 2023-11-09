@@ -1454,7 +1454,7 @@ class HuggingFaceAutoLM(BaseLM):
             
             # PH: start (LLM.int8() performance)
             print("Hi")
-            quantization_config = BitsAndBytesConfig(bnb_4bit_compute_dtype=torch.bfloat16, llm_int8_threshold=6)
+            quantization_config = BitsAndBytesConfig(bnb_4bit_compute_dtype=torch.bfloat16, llm_int8_threshold=6.0)
             
             model = self.AUTO_MODEL_CLASS.from_pretrained(
                 pretrained,
