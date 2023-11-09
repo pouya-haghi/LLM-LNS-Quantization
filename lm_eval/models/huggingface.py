@@ -1466,7 +1466,7 @@ class HuggingFaceAutoLM(BaseLM):
                 load_in_8bit=True,
                 trust_remote_code=trust_remote_code,
                 torch_dtype=torch_dtype,
-                quantization_config=quantization_config
+                quantization_config=quantization_config,
                 **model_kwargs,
             )
 
