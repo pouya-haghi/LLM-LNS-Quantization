@@ -16,6 +16,7 @@ from lm_eval.base import BaseLM
 from peft import PeftModel, PeftConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch.nn as nn
+from transformers import BitsAndBytesConfig
 
 TokenSequence = Union[List[int], torch.LongTensor, torch.Tensor, BatchEncoding]
 
@@ -1450,18 +1451,38 @@ class HuggingFaceAutoLM(BaseLM):
                         model_kwargs[
                             "bnb_4bit_use_double_quant"
                         ] = bnb_4bit_use_double_quant
+            
+            # PH: start (LLM.int8() performance)
+            print("Hi")
+            quantization_config = BitsAndBytesConfig(bnb_4bit_compute_dtype=torch.bfloat16, llm_int8_threshold=6)
+            
             model = self.AUTO_MODEL_CLASS.from_pretrained(
                 pretrained,
                 revision=revision + ("/" + subfolder if subfolder is not None else ""),
                 low_cpu_mem_usage=low_cpu_mem_usage,
-                device_map=device_map,
+                device_map="auto",
                 max_memory=max_memory,
                 offload_folder=offload_folder,
-                load_in_8bit=load_in_8bit,
+                load_in_8bit=True,
                 trust_remote_code=trust_remote_code,
                 torch_dtype=torch_dtype,
+                quantization_config=quantization_config
                 **model_kwargs,
             )
+
+            # model = self.AUTO_MODEL_CLASS.from_pretrained(
+            #     pretrained,
+            #     revision=revision + ("/" + subfolder if subfolder is not None else ""),
+            #     low_cpu_mem_usage=low_cpu_mem_usage,
+            #     device_map=device_map,
+            #     max_memory=max_memory,
+            #     offload_folder=offload_folder,
+            #     load_in_8bit=load_in_8bit,
+            #     trust_remote_code=trust_remote_code,
+            #     torch_dtype=torch_dtype,
+            #     **model_kwargs,
+            # )
+            # PH: end
         else:
             from auto_gptq import AutoGPTQForCausalLM
 
