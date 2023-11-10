@@ -1480,7 +1480,8 @@ class HuggingFaceAutoLM(BaseLM):
                 offload_folder=offload_folder,
                 load_in_8bit=load_in_8bit,
                 trust_remote_code=trust_remote_code,
-                torch_dtype=torch_dtype,
+                # torch_dtype=torch_dtype,
+                torch_dtype=torch.float16,
                 **model_kwargs,
             )
             # PH: end
