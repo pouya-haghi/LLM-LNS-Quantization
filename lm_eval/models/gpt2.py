@@ -104,63 +104,63 @@ class HFLM(BaseLM):
 
             # # PH: start (pre-processing) finding # of times that inference is called.
             # For keeping track of activations:
-            class ReferenceCounter:
-                def __init__(self):
-                    self.count = 0
-                    self.count_shape = 0
-                def increase(self):
-                    self.count += 1
-                def add_shape(self, num):
-                    self.count_shape += num
-                def get_count(self):
-                    return self.count
+            # class ReferenceCounter:
+            #     def __init__(self):
+            #         self.count = 0
+            #         self.count_shape = 0
+            #     def increase(self):
+            #         self.count += 1
+            #     def add_shape(self, num):
+            #         self.count_shape += num
+            #     def get_count(self):
+            #         return self.count
 
-            counter = ReferenceCounter()
-            # list_output_activation = {}
+            # counter = ReferenceCounter()
+            # # list_output_activation = {}
 
-            class STEFunction_structured(torch.autograd.Function):
-                """ define straight through estimator with overrided gradient (gate) """
-                @staticmethod
-                def forward(ctx, input):
-                    # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
-                    # output = input.clone()
-                    if isinstance(input, tuple):
-                        # Clone each tensor in the tuple
-                        output = tuple(t.clone() for t in input)
-                        print("count", counter.count)
-                        return output                
-                    else:
-                        # If input is not a tuple, clone it
-                        output = input.clone()
-                        print("count", counter.count)
-                        if len(output.shape) == 3: # 3D
-                            counter.add_shape(output.shape[1])
-                        elif len(output.shape) == 2: # 2D
-                            counter.add_shape(output.shape[0])
-                        else:
-                            print("Out of shape")
-                        print("shape", counter.count_shape)
-                        print("avg", counter.count_shape/counter.count)
-                        return output
+            # class STEFunction_structured(torch.autograd.Function):
+            #     """ define straight through estimator with overrided gradient (gate) """
+            #     @staticmethod
+            #     def forward(ctx, input):
+            #         # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
+            #         # output = input.clone()
+            #         if isinstance(input, tuple):
+            #             # Clone each tensor in the tuple
+            #             output = tuple(t.clone() for t in input)
+            #             print("count", counter.count)
+            #             return output                
+            #         else:
+            #             # If input is not a tuple, clone it
+            #             output = input.clone()
+            #             print("count", counter.count)
+            #             if len(output.shape) == 3: # 3D
+            #                 counter.add_shape(output.shape[1])
+            #             elif len(output.shape) == 2: # 2D
+            #                 counter.add_shape(output.shape[0])
+            #             else:
+            #                 print("Out of shape")
+            #             print("shape", counter.count_shape)
+            #             print("avg", counter.count_shape/counter.count)
+            #             return output
 
-                @staticmethod
-                def backward(ctx, grad_output):
-                    # # aux1 = ctx.saved_tensors # if you want to use input during backward calculation
-                    grad_input = grad_output.clone()
-                    return grad_input
+            #     @staticmethod
+            #     def backward(ctx, grad_output):
+            #         # # aux1 = ctx.saved_tensors # if you want to use input during backward calculation
+            #         grad_input = grad_output.clone()
+            #         return grad_input
 
-            def activation_hook(module, input, output):
-                counter.increase() #$$$
-                output = STEFunction_structured.apply(output)
-                # for keeping track of activations
-                # list_output_activation[str(module.__class__.__name__)+str("_")+str(counter.get_count())] = output #$$$
-                return output
+            # def activation_hook(module, input, output):
+            #     counter.increase() #$$$
+            #     output = STEFunction_structured.apply(output)
+            #     # for keeping track of activations
+            #     # list_output_activation[str(module.__class__.__name__)+str("_")+str(counter.get_count())] = output #$$$
+            #     return output
 
-            EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
-            for name, module in self.model.named_modules():
-                if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
-                    module.register_forward_hook(activation_hook)
-                    break
+            # EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
+            # for name, module in self.model.named_modules():
+            #     if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
+            #         module.register_forward_hook(activation_hook)
+            #         break
             # self.model.model.layers[0].self_attn.q_proj.register_forward_hook(activation_hook)
             # # # PH: end
 
