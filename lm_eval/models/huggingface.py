@@ -1664,7 +1664,9 @@ class HuggingFaceAutoLM(BaseLM):
             else:
                 max_tokens = max_generation_length
 
+            # PH: start
             print("max_token:", max_tokens)
+            # PH: end
             token_context = self.tok_encode_batch(context)
 
             responses = self._model_generate(
@@ -1735,6 +1737,10 @@ class AutoCausalLM(HuggingFaceAutoLM):
         stopping_criteria = stop_sequences_criteria(
             self.tokenizer, stop, input_ids.shape[1], input_ids.shape[0]
         )
+
+        # PH: start
+        print("max_token:", max_tokens)
+        # PH: end
         generations = self.model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
