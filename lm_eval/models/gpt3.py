@@ -144,7 +144,7 @@ class GPT3LM(BaseLM):
                 ctxlens.append(ctxlen)
 
             # PH
-            print("Bye4")
+            # print("Bye4")
             # PH
             response = oa_completion(
                 engine=self.engine,
@@ -203,7 +203,7 @@ class GPT3LM(BaseLM):
                 inps.append(inp)
 
             #PH:
-            print("Bye5")
+            # print("Bye5")
             #PH
             response = oa_completion(
                 engine=self.engine,
