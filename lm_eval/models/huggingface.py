@@ -1478,11 +1478,11 @@ class HuggingFaceAutoLM(BaseLM):
                 device_map=device_map,
                 max_memory=max_memory,
                 offload_folder=offload_folder,
-                # load_in_8bit=load_in_8bit,
-                load_in_8bit=True,
+                load_in_8bit=load_in_8bit,
+                # load_in_8bit=True,
                 trust_remote_code=trust_remote_code,
-                # torch_dtype=torch_dtype,
-                torch_dtype=torch.float16,
+                torch_dtype=torch_dtype,
+                # torch_dtype=torch.float16,
                 **model_kwargs,
             )
             # PH: end
@@ -1664,6 +1664,7 @@ class HuggingFaceAutoLM(BaseLM):
             else:
                 max_tokens = max_generation_length
 
+            print("max_token:", max_tokens)
             token_context = self.tok_encode_batch(context)
 
             responses = self._model_generate(
