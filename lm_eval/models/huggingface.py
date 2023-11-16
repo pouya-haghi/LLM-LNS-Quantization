@@ -1667,7 +1667,7 @@ class HuggingFaceAutoLM(BaseLM):
                 max_tokens = max_generation_length
 
             # PH: start
-            # print("Bye1")
+            print("Bye1")
             # print("max_token:", max_tokens)
             # PH: end
             token_context = self.tok_encode_batch(context)
@@ -1742,7 +1742,7 @@ class AutoCausalLM(HuggingFaceAutoLM):
         )
 
         # PH: start
-        # print("Bye2")
+        print("Bye2")
         # print("max_token:", max_tokens)
         # PH: end
         generations = self.model.generate(
@@ -1910,7 +1910,7 @@ class AutoSeq2SeqLM(HuggingFaceAutoLM):
         )
 
         # PH:
-        # print("Bye3")
+        print("Bye3")
         # PH:
 
         generations = self.model.generate(

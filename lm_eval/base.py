@@ -454,7 +454,7 @@ class BaseLM(LM):
             max_gen_tokens = min(
                 self.max_gen_toks, request_args.get("max_length", self.max_gen_toks)
             )
-            print("Bye")
+            # print("Bye")
             cont = self._model_generate(
                 context_enc, context_enc.shape[1] + max_gen_tokens, primary_until
             )
