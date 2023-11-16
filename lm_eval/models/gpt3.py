@@ -143,6 +143,9 @@ class GPT3LM(BaseLM):
                 inps.append(inp)
                 ctxlens.append(ctxlen)
 
+            # PH
+            print("Bye4")
+            # PH
             response = oa_completion(
                 engine=self.engine,
                 prompt=inps,
@@ -198,6 +201,10 @@ class GPT3LM(BaseLM):
                 context_enc = self.tok_encode(context)
                 inp = context_enc[-(self.max_length - self.max_gen_toks) :]
                 inps.append(inp)
+
+            #PH:
+            print("Bye5")
+            #PH
             response = oa_completion(
                 engine=self.engine,
                 prompt=inps,
