@@ -1471,6 +1471,8 @@ class HuggingFaceAutoLM(BaseLM):
             #     **model_kwargs,
             # )
 
+            print("Hi")
+
             model = self.AUTO_MODEL_CLASS.from_pretrained(
                 pretrained,
                 revision=revision + ("/" + subfolder if subfolder is not None else ""),
@@ -1665,7 +1667,7 @@ class HuggingFaceAutoLM(BaseLM):
                 max_tokens = max_generation_length
 
             # PH: start
-            print("max_token:", max_tokens)
+            # print("max_token:", max_tokens)
             # PH: end
             token_context = self.tok_encode_batch(context)
 
@@ -1739,7 +1741,7 @@ class AutoCausalLM(HuggingFaceAutoLM):
         )
 
         # PH: start
-        print("max_token:", max_tokens)
+        # print("max_token:", max_tokens)
         # PH: end
         generations = self.model.generate(
             input_ids=input_ids,
