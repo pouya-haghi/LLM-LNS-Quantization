@@ -1457,38 +1457,38 @@ class HuggingFaceAutoLM(BaseLM):
             
             # PH: start (LLM.int8() performance)
             # print("Hi")
-            # quantization_config = BitsAndBytesConfig(bnb_4bit_compute_dtype=torch.bfloat16, llm_int8_threshold=6.0)
+            quantization_config = BitsAndBytesConfig(bnb_4bit_compute_dtype=torch.bfloat16, llm_int8_threshold=6.0)
             
-            # model = self.AUTO_MODEL_CLASS.from_pretrained(
-            #     pretrained,
-            #     revision=revision + ("/" + subfolder if subfolder is not None else ""),
-            #     low_cpu_mem_usage=low_cpu_mem_usage,
-            #     device_map="auto",
-            #     max_memory=max_memory,
-            #     offload_folder=offload_folder,
-            #     load_in_8bit=True,
-            #     trust_remote_code=trust_remote_code,
-            #     # torch_dtype=torch_dtype,
-            #     quantization_config=quantization_config,
-            #     **model_kwargs,
-            # )
-
-            # print("Hi")
-
             model = self.AUTO_MODEL_CLASS.from_pretrained(
                 pretrained,
                 revision=revision + ("/" + subfolder if subfolder is not None else ""),
                 low_cpu_mem_usage=low_cpu_mem_usage,
-                device_map=device_map,
+                device_map="auto",
                 max_memory=max_memory,
                 offload_folder=offload_folder,
-                load_in_8bit=load_in_8bit,
-                # load_in_8bit=True,
+                load_in_8bit=True,
                 trust_remote_code=trust_remote_code,
-                torch_dtype=torch_dtype,
-                # torch_dtype=torch.float16,
+                # torch_dtype=torch_dtype,
+                quantization_config=quantization_config,
                 **model_kwargs,
             )
+
+            # print("Hi")
+
+            # model = self.AUTO_MODEL_CLASS.from_pretrained(
+            #     pretrained,
+            #     revision=revision + ("/" + subfolder if subfolder is not None else ""),
+            #     low_cpu_mem_usage=low_cpu_mem_usage,
+            #     device_map=device_map,
+            #     max_memory=max_memory,
+            #     offload_folder=offload_folder,
+            #     load_in_8bit=load_in_8bit,
+            #     # load_in_8bit=True,
+            #     trust_remote_code=trust_remote_code,
+            #     torch_dtype=torch_dtype,
+            #     # torch_dtype=torch.float16,
+            #     **model_kwargs,
+            # )
             # PH: end
         else:
             from auto_gptq import AutoGPTQForCausalLM
