@@ -940,7 +940,7 @@ class HuggingFaceAutoLM(BaseLM):
                     output = input.clone()
                     # First do scaling
                     if len(output.shape) == 3: # 3D
-                        max_val = torch.max(torch.abs(output), dim=1)[0] # get max for each column
+                        max_val_c = torch.max(torch.abs(output), dim=1)[0] # get max for each column
                     elif len(output.shape) == 2: # 2D
                         max_val_c = torch.max(torch.abs(output), dim=0)[0] # get max for each column
                     else:
