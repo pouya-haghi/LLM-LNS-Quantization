@@ -382,7 +382,7 @@ class HuggingFaceAutoLM(BaseLM):
                 else:
                     # If input is not a tuple, clone it
                     output = input.clone()
-                    print(output.dtype)
+                    # print(output.dtype)
                     # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
                     clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
                     output = torch.where(output<0, -clamped_output, clamped_output)
