@@ -426,61 +426,61 @@ class HuggingFaceAutoLM(BaseLM):
         # # # PH: end
 
         # # # PH: start (LNS8)
-        num_bit_mantissa = 4 # for 8 bit repr.
-        # num_frac = 10 # fractional bits for 16 bit repr.
-        num_frac = 3 # fractional bits for 8 bit repr.
+        # num_bit_mantissa = 4 # for 8 bit repr.
+        # # num_frac = 10 # fractional bits for 16 bit repr.
+        # num_frac = 3 # fractional bits for 8 bit repr.
 
-        scale = float(2**num_frac)
-        threshold_clamp = 2**(num_bit_mantissa-1)
-        threshold_up = float(2**threshold_clamp)
-        threshold_down = float(2**-(threshold_clamp))
+        # scale = float(2**num_frac)
+        # threshold_clamp = 2**(num_bit_mantissa-1)
+        # threshold_up = float(2**threshold_clamp)
+        # threshold_down = float(2**-(threshold_clamp))
 
-        # For keeping track of activations:
-        # class ReferenceCounter:
-        #     def __init__(self):
-        #         self.count = 0
-        #     def increase(self):
-        #         self.count += 1
-        #     def get_count(self):
-        #         return self.count
+        # # For keeping track of activations:
+        # # class ReferenceCounter:
+        # #     def __init__(self):
+        # #         self.count = 0
+        # #     def increase(self):
+        # #         self.count += 1
+        # #     def get_count(self):
+        # #         return self.count
 
-        # counter = ReferenceCounter()
-        # list_output_activation = {}
+        # # counter = ReferenceCounter()
+        # # list_output_activation = {}
 
-        class STEFunction_structured(torch.autograd.Function):
-            """ define straight through estimator with overrided gradient (gate) """
-            @staticmethod
-            def forward(ctx, input):
-                # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
-                if isinstance(input, tuple):
-                    # Clone each tensor in the tuple
-                    output = tuple(t.clone() for t in input)
-                    output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
-                    output = tuple(torch.where(t > 0, torch.pow(2,(torch.round(torch.log2(t)*scale))/scale), torch.where(t < 0, -torch.pow(2,(torch.round(torch.log2(-t)*scale)/scale)), t)) for t in output)
-                    return output             
-                else:
-                    output = input.clone()
-                    # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
-                    clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
-                    output = torch.where(output<0, -clamped_output, clamped_output)
-                    # v1: concise
-                    output = torch.where(output > 0, torch.pow(2,(torch.round(torch.log2(output)*scale))/scale), torch.where(output < 0, -torch.pow(2,(torch.round(torch.log2(-output)*scale)/scale)), output))
-                    return output
+        # class STEFunction_structured(torch.autograd.Function):
+        #     """ define straight through estimator with overrided gradient (gate) """
+        #     @staticmethod
+        #     def forward(ctx, input):
+        #         # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
+        #         if isinstance(input, tuple):
+        #             # Clone each tensor in the tuple
+        #             output = tuple(t.clone() for t in input)
+        #             output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
+        #             output = tuple(torch.where(t > 0, torch.pow(2,(torch.round(torch.log2(t)*scale))/scale), torch.where(t < 0, -torch.pow(2,(torch.round(torch.log2(-t)*scale)/scale)), t)) for t in output)
+        #             return output             
+        #         else:
+        #             output = input.clone()
+        #             # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
+        #             clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
+        #             output = torch.where(output<0, -clamped_output, clamped_output)
+        #             # v1: concise
+        #             output = torch.where(output > 0, torch.pow(2,(torch.round(torch.log2(output)*scale))/scale), torch.where(output < 0, -torch.pow(2,(torch.round(torch.log2(-output)*scale)/scale)), output))
+        #             return output
 
-            @staticmethod
-            def backward(ctx, grad_output):
-                grad_input = grad_output.clone()
-                return grad_input
+        #     @staticmethod
+        #     def backward(ctx, grad_output):
+        #         grad_input = grad_output.clone()
+        #         return grad_input
 
-        def activation_hook(module, input, output):
-            output = STEFunction_structured.apply(output)
-            return output
+        # def activation_hook(module, input, output):
+        #     output = STEFunction_structured.apply(output)
+        #     return output
 
-        EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
+        # EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
 
-        for name, module in self.model.named_modules():
-            if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
-                module.register_forward_hook(activation_hook)
+        # for name, module in self.model.named_modules():
+        #     if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
+        #         module.register_forward_hook(activation_hook)
         # # PH: end
 
         # # # PH: start (modified LNS8 - old)
