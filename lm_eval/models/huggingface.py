@@ -430,22 +430,22 @@ class HuggingFaceAutoLM(BaseLM):
         # # # PH: end
 
         # PH: start (MX format block floating point)
-        # Simple MX spec for MXFP6 weights+activations
-        mx_specs = {
-            'w_elem_format': 'fp8_e4m3',
-            'a_elem_format': 'fp8_e4m3',
-            'block_size': 32,
-            'bfloat': 16,
-            'custom_cuda': False,
-            # For quantization-aware finetuning, do backward pass in FP32
-            'quantize_backprop': False,
-        }
-        mx_specs = finalize_mx_specs(mx_specs)
+        # # Simple MX spec for MXFP6 weights+activations
+        # mx_specs = {
+        #     'w_elem_format': 'fp8_e4m3',
+        #     'a_elem_format': 'fp8_e4m3',
+        #     'block_size': 32,
+        #     'bfloat': 16,
+        #     'custom_cuda': False,
+        #     # For quantization-aware finetuning, do backward pass in FP32
+        #     'quantize_backprop': False,
+        # }
+        # mx_specs = finalize_mx_specs(mx_specs)
 
-        # Auto-inject MX modules and functions
-        # This will replace certain torch.nn.* and torch.nn.functional.*
-        # modules/functions in the global namespace!
-        mx_mapping.inject_pyt_ops(mx_specs)
+        # # Auto-inject MX modules and functions
+        # # This will replace certain torch.nn.* and torch.nn.functional.*
+        # # modules/functions in the global namespace!
+        # mx_mapping.inject_pyt_ops(mx_specs)
         # PH: end
 
         # # # PH: start (LNS8)
@@ -833,6 +833,65 @@ class HuggingFaceAutoLM(BaseLM):
         # for name, module in self.model.named_modules():
         #     if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
         #         module.register_forward_hook(activation_hook)
+        # # PH: end
+
+        # # # PH: start (VSQuant) per-col quantization but the scale is integer (u can do with torch.round). Also with block size=sth I approximate it with the whole vector.
+        num_bit = 8
+
+        class STEFunction_structured(torch.autograd.Function):
+            """ define straight through estimator with overrided gradient (gate) """
+            @staticmethod
+            def forward(ctx, input):
+                # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
+                if isinstance(input, tuple):
+                    # Clone each tensor in the tuple
+                    output = tuple(t.clone() for t in input)
+                    output = tuple((torch.round(torch.where(output<0, -torch.clamp(torch.abs(output), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.round(torch.max(torch.abs(output), dim=0)[0])==0, torch.tensor(1.0), torch.round(torch.max(torch.abs(output), dim=0)[0])))), min=0, max = num_bit)-1))).unsqueeze(0), max=torch.pow(2, torch.pow(2, num_bit -  torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.round(torch.max(torch.abs(output), dim=0)[0])==0, torch.tensor(1.0), torch.round(torch.max(torch.abs(output), dim=0)[0])))), min=0, max = num_bit)-1)).unsqueeze(0)), torch.clamp(torch.abs(output), min=torch.pow(2, -(torch.pow(2, num_bit -  torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.round(torch.max(torch.abs(output), dim=0)[0])==0, torch.tensor(1.0), torch.round(torch.max(torch.abs(output), dim=0)[0])))), min=0, max = num_bit)-1))).unsqueeze(0), max=torch.pow(2, torch.pow(2, num_bit -  torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.round(torch.max(torch.abs(output), dim=0)[0])==0, torch.tensor(1.0), torch.round(torch.max(torch.abs(output), dim=0)[0])))), min=0, max = num_bit)-1)).unsqueeze(0)))*torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.round(torch.max(torch.abs(output), dim=0)[0])==0, torch.tensor(1.0), torch.round(torch.max(torch.abs(output), dim=0)[0])))), min=0, max = num_bit)).unsqueeze(0)))/torch.pow(2, torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/torch.where(torch.round(torch.max(torch.abs(output), dim=0)[0])==0, torch.tensor(1.0), torch.round(torch.max(torch.abs(output), dim=0)[0])))), min=0, max = num_bit)).unsqueeze(0) for t in output)                    
+                    return output
+                else:
+                    output = input.clone()
+                    if len(output.shape) == 3: # 3D
+                        max_val_c = torch.round(torch.max(torch.abs(output), dim=1)[0]) # get max for each column and then quantize it with torch.round
+                    elif len(output.shape) == 2: # 2D
+                        max_val_c = torch.round(torch.max(torch.abs(output), dim=0)[0]) # get max for each column and then quantize it with torch.round
+                    else:
+                        print("Out of shape")
+                    max_val_c = torch.where(max_val_c==0, torch.tensor(1.0), max_val_c) # VERY IMPORTANT: YOU NEED TO REPLACE ZEROS WITH ONES JUST IN CASE IF THE MAX WAS ZERO WHICH LEADS TO NAN
+                    num_frac = torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/max_val_c)), min=0, max = num_bit) # fractional bits for 8 bit repr.
+                    num_bit_mantissa = num_bit -  num_frac # these are also vectors
+                    scale = torch.pow(2, num_frac)
+                    threshold_clamp = torch.pow(2, num_bit_mantissa-1)
+                    threshold_up = torch.pow(2, threshold_clamp)
+                    threshold_down = torch.pow(2, -(threshold_clamp))
+                    # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
+                    if len(output.shape) == 3: # 3D
+                        clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(1), max=threshold_up.unsqueeze(1))
+                    elif len(output.shape) == 2: # 2D
+                        clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(0), max=threshold_up.unsqueeze(0))
+                    else:
+                        print("Out of shape")
+                    output = torch.where(output<0, -clamped_output, clamped_output)
+                    if len(output.shape) == 3: # 3D
+                        output = (torch.round(output*scale.unsqueeze(1)))/scale.unsqueeze(1)
+                    elif len(output.shape) == 2: # 2D
+                        output = (torch.round(output*scale.unsqueeze(0)))/scale.unsqueeze(0)
+                    else:
+                        print("Out of shape")
+                    return output
+            @staticmethod
+            def backward(ctx, grad_output):
+                grad_input = grad_output.clone()
+                return grad_input
+
+        def activation_hook(module, input, output):
+            output = STEFunction_structured.apply(output)
+            return output
+
+        EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
+
+        for name, module in self.model.named_modules():
+            if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
+                module.register_forward_hook(activation_hook)
         # # PH: end
 
         # # PH: start (W8A8) per-tensor quant for both activation and weights
