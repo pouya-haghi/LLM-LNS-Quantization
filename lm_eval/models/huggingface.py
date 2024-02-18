@@ -18,9 +18,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch.nn as nn
 from transformers import BitsAndBytesConfig
 
-# MX format:
-from mx import finalize_mx_specs
-from mx import mx_mapping
+# MX format: # uncomment here to enable MX
+# from mx import finalize_mx_specs
+# from mx import mx_mapping
 
 TokenSequence = Union[List[int], torch.LongTensor, torch.Tensor, BatchEncoding]
 
