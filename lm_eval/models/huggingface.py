@@ -432,8 +432,8 @@ class HuggingFaceAutoLM(BaseLM):
         # PH: start (MX format block floating point)
         # Simple MX spec for MXFP6 weights+activations
         mx_specs = {
-            'w_elem_format': 'fp8_e4m3',
-            'a_elem_format': 'fp8_e4m3',
+            'w_elem_format': 'fp8_e5m2',
+            'a_elem_format': 'fp8_e5m2',
             'block_size': 32,
             'bfloat': 0,
             'fp': 0,
