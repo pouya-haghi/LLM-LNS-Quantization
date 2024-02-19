@@ -435,8 +435,8 @@ class HuggingFaceAutoLM(BaseLM):
             'w_elem_format': 'fp8_e5m2',
             'a_elem_format': 'fp8_e5m2',
             'block_size': 32,
-            'bfloat': 0,
-            'fp': 0,
+            # 'bfloat': 0,
+            # 'fp': 0,
             'custom_cuda': False,
             # For quantization-aware finetuning, do backward pass in FP32
             'quantize_backprop': False,
