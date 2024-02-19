@@ -19,8 +19,8 @@ import torch.nn as nn
 from transformers import BitsAndBytesConfig
 
 # MX format: # uncomment here to enable MX
-from mx import finalize_mx_specs
-from mx import mx_mapping
+# from mx import finalize_mx_specs
+# from mx import mx_mapping
 
 TokenSequence = Union[List[int], torch.LongTensor, torch.Tensor, BatchEncoding]
 
@@ -429,24 +429,171 @@ class HuggingFaceAutoLM(BaseLM):
         # # model.model.layers[0].self_attn.q_proj.register_forward_hook(activation_hook)
         # # # PH: end
 
-        # PH: start (MX format block floating point)
-        # Simple MX spec for MXFP6 weights+activations
-        mx_specs = {
-            'w_elem_format': 'int2',
-            'a_elem_format': 'int2',
-            'block_size': 16,
-            # 'bfloat': 0,
-            # 'fp': 0,
-            'custom_cuda': False,
-            # For quantization-aware finetuning, do backward pass in FP32
-            'quantize_backprop': False,
-        }
-        mx_specs = finalize_mx_specs(mx_specs)
+        # PH: start (MX format block floating point) 
+        block_size = 32
+        num_bit_exponent = 4
+        num_bit_mantissa  = 3
+        offset = torch.tensor(2**(num_bit_exponent-1))
+        scale = torch.tensor(2 ** num_bit_mantissa)
+        threshold_clamp = 2**(num_bit_exponent-1)
+        threshold_up = float(2**threshold_clamp)
+        threshold_down = float(2**-(threshold_clamp))
 
-        # Auto-inject MX modules and functions
-        # This will replace certain torch.nn.* and torch.nn.functional.*
-        # modules/functions in the global namespace!
-        mx_mapping.inject_pyt_ops(mx_specs)
+        class STEFunction_structured(torch.autograd.Function):
+            @staticmethod
+            def forward(ctx, input):
+                if isinstance(input, tuple):
+                    output = tuple(t.clone() for t in input)
+                    output = tuple(torch.where(t < 0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
+                    output = tuple(((torch.round(((t / torch.pow(2, (torch.floor(torch.log2(torch.abs(t)))))) - 1) * scale)/scale) + 1) * torch.pow(2, (torch.floor(torch.log2(torch.abs(t))))) for t in output)
+                    return output                
+                else:
+                    output = input.clone()
+                    if len(output.shape) == 3: # 3D
+
+                        # 1) blockize tensor
+                        batch_sz, num_rows, num_cols = output.shape
+                        # Reshape the tensor to split each row into blocks of size 'block_size'
+                        num_blocks = (num_rows + block_size - 1) // block_size
+                        # Pad the tensor along the rows if necessary (num_row is not divisible to block_size)
+                        padding_rows = num_blocks * block_size - num_rows
+                        output_padded = torch.cat([output, torch.zeros(padding_rows, num_cols)], dim=1)
+                        # Reshape the padded tensor to split each row into blocks of size 'block_size'
+                        output_reshaped = output_padded.view(batch_sz, num_blocks, block_size, num_cols)
+                        # print(output_reshaped.shape)
+                        # print(output_reshaped)
+                        # Take the absolute maximum within each block along the second dimension
+                        max_vals_within_blocks = torch.round(torch.max(torch.abs(output_reshaped), dim=2)[0])
+                        max_vals_within_blocks = torch.where(max_vals_within_blocks==0, torch.tensor(1.0), max_vals_within_blocks) # replace zeros with 1 to avoid None
+                        # print(max_vals_within_blocks)
+                        coeff = threshold_clamp/max_vals_within_blocks
+
+                        # 2) scale it
+                        output_reshaped = output_reshaped*coeff.unsqueeze(2)
+                        # output_reshaped = output_reshaped*max_vals_within_blocks.unsqueeze(1)
+                        # print(output_reshaped)
+
+                        # 3) do FP8
+                        clamped_output = torch.clamp(torch.abs(output_reshaped), min=threshold_down, max=threshold_up)
+                        output_reshaped = torch.where(output_reshaped<0, -clamped_output, clamped_output)
+                        exponent_bits = torch.floor(torch.log2(torch.abs(output_reshaped))) + offset
+                        exponent = torch.pow(2, (exponent_bits - offset))
+                        mantissa_bits = torch.round(((output_reshaped / exponent) - 1) * scale)
+                        output_reshaped = ((mantissa_bits/scale) + 1) * exponent
+
+                        # 4) rescale back
+                        output_reshaped = output_reshaped/coeff.unsqueeze(2)
+
+                        # 5) restore to original shape (de-blockize)
+                        # Now 'max_vals_within_blocks_flat' contains the maximum value within each block for each row
+                        output_padded_restored = output_reshaped.view(batch_sz, -1, num_cols)
+                        # Extract the unpadded part of the tensor
+                        output_restored = output_padded_restored[:, :num_rows, :]
+                    elif len(output.shape) == 2: #2D
+
+                        # 1) blockize tensor
+                        num_rows, num_cols = output.shape
+                        # Reshape the tensor to split each row into blocks of size 'block_size'
+                        num_blocks = (num_rows + block_size - 1) // block_size
+                        # Pad the tensor along the rows if necessary (num_row is not divisible to block_size)
+                        padding_rows = num_blocks * block_size - num_rows
+                        output_padded = torch.cat([output, torch.zeros(padding_rows, num_cols)], dim=0)
+                        # Reshape the padded tensor to split each row into blocks of size 'block_size'
+                        output_reshaped = output_padded.view(num_blocks, block_size, num_cols)
+                        # print(output_reshaped.shape)
+                        # print(output_reshaped)
+                        # Take the absolute maximum within each block along the second dimension
+                        max_vals_within_blocks = torch.round(torch.max(torch.abs(output_reshaped), dim=1)[0])
+                        max_vals_within_blocks = torch.where(max_vals_within_blocks==0, torch.tensor(1.0), max_vals_within_blocks) # replace zeros with 1 to avoid None
+                        # print(max_vals_within_blocks)
+                        coeff = threshold_clamp/max_vals_within_blocks
+
+                        # 2) scale it
+                        output_reshaped = output_reshaped*coeff.unsqueeze(1)
+                        # output_reshaped = output_reshaped*max_vals_within_blocks.unsqueeze(1)
+                        # print(output_reshaped)
+
+                        # 3) do FP8
+                        clamped_output = torch.clamp(torch.abs(output_reshaped), min=threshold_down, max=threshold_up)
+                        output_reshaped = torch.where(output_reshaped<0, -clamped_output, clamped_output)
+                        exponent_bits = torch.floor(torch.log2(torch.abs(output_reshaped))) + offset
+                        exponent = torch.pow(2, (exponent_bits - offset))
+                        mantissa_bits = torch.round(((output_reshaped / exponent) - 1) * scale)
+                        output_reshaped = ((mantissa_bits/scale) + 1) * exponent
+
+                        # 4) rescale back
+                        output_reshaped = output_reshaped/coeff.unsqueeze(1)
+
+                        # 5) restore to original shape (de-blockize)
+                        # Now 'max_vals_within_blocks_flat' contains the maximum value within each block for each row
+                        output_padded_restored = output_reshaped.view(-1, num_cols)
+                        # Extract the unpadded part of the tensor
+                        output_restored = output_padded_restored[:num_rows, :]
+                    else:
+                        print("out of shape")
+                    return output_restored
+
+        #             if len(output.shape) == 3: # 3D
+        #                 max_val_c = torch.round(torch.max(torch.abs(output), dim=1)[0]) # get max for each column and then quantize it with torch.round
+        #             elif len(output.shape) == 2: # 2D
+        #                 max_val_c = torch.round(torch.max(torch.abs(output), dim=0)[0]) # get max for each column and then quantize it with torch.round
+        #             else:
+        #                 print("Out of shape")
+        #             max_val_c = torch.where(max_val_c==0, torch.tensor(1.0), max_val_c) # VERY IMPORTANT: YOU NEED TO REPLACE ZEROS WITH ONES JUST IN CASE IF THE MAX WAS ZERO WHICH LEADS TO NAN
+        #             num_frac = torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/max_val_c)), min=0, max = num_bit) # fractional bits for 8 bit repr.
+        #             num_bit_mantissa = num_bit -  num_frac # these are also vectors
+        #             scale = torch.pow(2, num_frac)
+        #             threshold_clamp = torch.pow(2, num_bit_mantissa-1)
+        #             threshold_up = torch.pow(2, threshold_clamp)
+        #             threshold_down = torch.pow(2, -(threshold_clamp))
+        #             # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
+        #             if len(output.shape) == 3: # 3D
+        #                 clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(1), max=threshold_up.unsqueeze(1))
+        #             elif len(output.shape) == 2: # 2D
+        #                 clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(0), max=threshold_up.unsqueeze(0))
+        #             else:
+        #                 print("Out of shape")
+        #             output = torch.where(output<0, -clamped_output, clamped_output)
+        #             if len(output.shape) == 3: # 3D
+        #                 output = (torch.round(output*scale.unsqueeze(1)))/scale.unsqueeze(1)
+        #             elif len(output.shape) == 2: # 2D
+        #                 output = (torch.round(output*scale.unsqueeze(0)))/scale.unsqueeze(0)
+        #             else:
+        #                 print("Out of shape")
+
+            @staticmethod
+            def backward(ctx, grad_output):
+                grad_input = grad_output.clone()
+                return grad_input
+
+        def activation_hook(module, input, output):
+            output = STEFunction_structured.apply(output)
+            return output
+
+        EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
+
+        for name, module in self.model.named_modules():
+            if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
+                module.register_forward_hook(activation_hook)
+
+        # This one is old
+        # Simple MX spec for MXFP6 weights+activations
+        # mx_specs = {
+        #     'w_elem_format': 'int2',
+        #     'a_elem_format': 'int2',
+        #     'block_size': 16,
+        #     # 'bfloat': 0,
+        #     # 'fp': 0,
+        #     'custom_cuda': False,
+        #     # For quantization-aware finetuning, do backward pass in FP32
+        #     'quantize_backprop': False,
+        # }
+        # mx_specs = finalize_mx_specs(mx_specs)
+
+        # # Auto-inject MX modules and functions
+        # # This will replace certain torch.nn.* and torch.nn.functional.*
+        # # modules/functions in the global namespace!
+        # mx_mapping.inject_pyt_ops(mx_specs)
         # PH: end
 
         # # # PH: start (LNS8)
