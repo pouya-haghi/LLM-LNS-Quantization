@@ -464,7 +464,7 @@ class HuggingFaceAutoLM(BaseLM):
                         # print(output_reshaped)
                         # Take the absolute maximum within each block along the second dimension
                         max_vals_within_blocks = torch.round(torch.max(torch.abs(output_reshaped), dim=2)[0])
-                        max_vals_within_blocks = torch.where(max_vals_within_blocks==0, torch.tensor(1.0), max_vals_within_blocks) # replace zeros with 1 to avoid None
+                        max_vals_within_blocks = torch.where(max_vals_within_blocks==0, torch.tensor(1.0, device=self.device), max_vals_within_blocks) # replace zeros with 1 to avoid None
                         # print(max_vals_within_blocks)
                         coeff = threshold_clamp/max_vals_within_blocks
 
@@ -504,7 +504,7 @@ class HuggingFaceAutoLM(BaseLM):
                         # print(output_reshaped)
                         # Take the absolute maximum within each block along the second dimension
                         max_vals_within_blocks = torch.round(torch.max(torch.abs(output_reshaped), dim=1)[0])
-                        max_vals_within_blocks = torch.where(max_vals_within_blocks==0, torch.tensor(1.0), max_vals_within_blocks) # replace zeros with 1 to avoid None
+                        max_vals_within_blocks = torch.where(max_vals_within_blocks==0, torch.tensor(1.0, device=self.device), max_vals_within_blocks) # replace zeros with 1 to avoid None
                         # print(max_vals_within_blocks)
                         coeff = threshold_clamp/max_vals_within_blocks
 
