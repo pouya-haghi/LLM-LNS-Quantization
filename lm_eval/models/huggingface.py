@@ -457,7 +457,7 @@ class HuggingFaceAutoLM(BaseLM):
                         num_blocks = (num_rows + block_size - 1) // block_size
                         # Pad the tensor along the rows if necessary (num_row is not divisible to block_size)
                         padding_rows = num_blocks * block_size - num_rows
-                        output_padded = torch.cat([output, torch.zeros((padding_rows, num_cols), device=torch.device("cuda"))], dim=1)
+                        output_padded = torch.cat([output, torch.zeros((batch_sz, padding_rows, num_cols), device=torch.device("cuda"))], dim=1)
                         # Reshape the padded tensor to split each row into blocks of size 'block_size'
                         output_reshaped = output_padded.view(batch_sz, num_blocks, block_size, num_cols)
                         # print(output_reshaped.shape)
