@@ -457,7 +457,7 @@ class HuggingFaceAutoLM(BaseLM):
                         num_blocks = (num_rows + block_size - 1) // block_size
                         # Pad the tensor along the rows if necessary (num_row is not divisible to block_size)
                         padding_rows = num_blocks * block_size - num_rows
-                        output_padded = torch.cat([output, torch.zeros(padding_rows, num_cols)], dim=1)
+                        output_padded = torch.cat([output, torch.zeros((padding_rows, num_cols), device=torch.device("cuda"))], dim=1)
                         # Reshape the padded tensor to split each row into blocks of size 'block_size'
                         output_reshaped = output_padded.view(batch_sz, num_blocks, block_size, num_cols)
                         # print(output_reshaped.shape)
@@ -497,7 +497,7 @@ class HuggingFaceAutoLM(BaseLM):
                         num_blocks = (num_rows + block_size - 1) // block_size
                         # Pad the tensor along the rows if necessary (num_row is not divisible to block_size)
                         padding_rows = num_blocks * block_size - num_rows
-                        output_padded = torch.cat([output, torch.zeros(padding_rows, num_cols)], dim=0)
+                        output_padded = torch.cat([output, torch.zeros((padding_rows, num_cols), device=torch.device("cuda"))], dim=0)
                         # Reshape the padded tensor to split each row into blocks of size 'block_size'
                         output_reshaped = output_padded.view(num_blocks, block_size, num_cols)
                         # print(output_reshaped.shape)
@@ -532,35 +532,6 @@ class HuggingFaceAutoLM(BaseLM):
                     else:
                         print("out of shape")
                     return output_restored
-
-        #             if len(output.shape) == 3: # 3D
-        #                 max_val_c = torch.round(torch.max(torch.abs(output), dim=1)[0]) # get max for each column and then quantize it with torch.round
-        #             elif len(output.shape) == 2: # 2D
-        #                 max_val_c = torch.round(torch.max(torch.abs(output), dim=0)[0]) # get max for each column and then quantize it with torch.round
-        #             else:
-        #                 print("Out of shape")
-        #             max_val_c = torch.where(max_val_c==0, torch.tensor(1.0), max_val_c) # VERY IMPORTANT: YOU NEED TO REPLACE ZEROS WITH ONES JUST IN CASE IF THE MAX WAS ZERO WHICH LEADS TO NAN
-        #             num_frac = torch.clamp(torch.floor(torch.log2((2**(num_bit-1) - 1)/max_val_c)), min=0, max = num_bit) # fractional bits for 8 bit repr.
-        #             num_bit_mantissa = num_bit -  num_frac # these are also vectors
-        #             scale = torch.pow(2, num_frac)
-        #             threshold_clamp = torch.pow(2, num_bit_mantissa-1)
-        #             threshold_up = torch.pow(2, threshold_clamp)
-        #             threshold_down = torch.pow(2, -(threshold_clamp))
-        #             # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
-        #             if len(output.shape) == 3: # 3D
-        #                 clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(1), max=threshold_up.unsqueeze(1))
-        #             elif len(output.shape) == 2: # 2D
-        #                 clamped_output = torch.clamp(torch.abs(output), min=threshold_down.unsqueeze(0), max=threshold_up.unsqueeze(0))
-        #             else:
-        #                 print("Out of shape")
-        #             output = torch.where(output<0, -clamped_output, clamped_output)
-        #             if len(output.shape) == 3: # 3D
-        #                 output = (torch.round(output*scale.unsqueeze(1)))/scale.unsqueeze(1)
-        #             elif len(output.shape) == 2: # 2D
-        #                 output = (torch.round(output*scale.unsqueeze(0)))/scale.unsqueeze(0)
-        #             else:
-        #                 print("Out of shape")
-
             @staticmethod
             def backward(ctx, grad_output):
                 grad_input = grad_output.clone()
