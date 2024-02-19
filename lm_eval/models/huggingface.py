@@ -434,7 +434,7 @@ class HuggingFaceAutoLM(BaseLM):
         mx_specs = {
             'w_elem_format': 'fp8_e5m2',
             'a_elem_format': 'fp8_e5m2',
-            'block_size': 32,
+            'block_size': 16,
             # 'bfloat': 0,
             # 'fp': 0,
             'custom_cuda': False,
