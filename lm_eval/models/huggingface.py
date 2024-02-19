@@ -430,122 +430,122 @@ class HuggingFaceAutoLM(BaseLM):
         # # # PH: end
 
         # PH: start (MX format block floating point) 
-        block_size = 32
-        num_bit_exponent = 4
-        num_bit_mantissa  = 3
-        offset = torch.tensor(2**(num_bit_exponent-1))
-        scale = torch.tensor(2 ** num_bit_mantissa)
-        threshold_clamp = 2**(num_bit_exponent-1)
-        threshold_up = float(2**threshold_clamp)
-        threshold_down = float(2**-(threshold_clamp))
+        # block_size = 32
+        # num_bit_exponent = 4
+        # num_bit_mantissa  = 3
+        # offset = torch.tensor(2**(num_bit_exponent-1))
+        # scale = torch.tensor(2 ** num_bit_mantissa)
+        # threshold_clamp = 2**(num_bit_exponent-1)
+        # threshold_up = float(2**threshold_clamp)
+        # threshold_down = float(2**-(threshold_clamp))
 
-        class STEFunction_structured(torch.autograd.Function):
-            @staticmethod
-            def forward(ctx, input):
-                if isinstance(input, tuple):
-                    output = tuple(t.clone() for t in input)
-                    output = tuple(torch.where(t < 0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
-                    output = tuple(((torch.round(((t / torch.pow(2, (torch.floor(torch.log2(torch.abs(t)))))) - 1) * scale)/scale) + 1) * torch.pow(2, (torch.floor(torch.log2(torch.abs(t))))) for t in output)
-                    return output                
-                else:
-                    output = input.clone()
-                    if len(output.shape) == 3: # 3D
+        # class STEFunction_structured(torch.autograd.Function):
+        #     @staticmethod
+        #     def forward(ctx, input):
+        #         if isinstance(input, tuple):
+        #             output = tuple(t.clone() for t in input)
+        #             output = tuple(torch.where(t < 0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
+        #             output = tuple(((torch.round(((t / torch.pow(2, (torch.floor(torch.log2(torch.abs(t)))))) - 1) * scale)/scale) + 1) * torch.pow(2, (torch.floor(torch.log2(torch.abs(t))))) for t in output)
+        #             return output                
+        #         else:
+        #             output = input.clone()
+        #             if len(output.shape) == 3: # 3D
 
-                        # 1) blockize tensor
-                        batch_sz, num_rows, num_cols = output.shape
-                        # Reshape the tensor to split each row into blocks of size 'block_size'
-                        num_blocks = (num_rows + block_size - 1) // block_size
-                        # Pad the tensor along the rows if necessary (num_row is not divisible to block_size)
-                        padding_rows = num_blocks * block_size - num_rows
-                        output_padded = torch.cat([output, torch.zeros((batch_sz, padding_rows, num_cols), device=self.device)], dim=1)
-                        # Reshape the padded tensor to split each row into blocks of size 'block_size'
-                        output_reshaped = output_padded.view(batch_sz, num_blocks, block_size, num_cols)
-                        # print(output_reshaped.shape)
-                        # print(output_reshaped)
-                        # Take the absolute maximum within each block along the second dimension
-                        max_vals_within_blocks = torch.round(torch.max(torch.abs(output_reshaped), dim=2)[0])
-                        max_vals_within_blocks = torch.where(max_vals_within_blocks==0, torch.tensor(1.0, device=self.device), max_vals_within_blocks) # replace zeros with 1 to avoid None
-                        # print(max_vals_within_blocks)
-                        coeff = threshold_clamp/max_vals_within_blocks
+        #                 # 1) blockize tensor
+        #                 batch_sz, num_rows, num_cols = output.shape
+        #                 # Reshape the tensor to split each row into blocks of size 'block_size'
+        #                 num_blocks = (num_rows + block_size - 1) // block_size
+        #                 # Pad the tensor along the rows if necessary (num_row is not divisible to block_size)
+        #                 padding_rows = num_blocks * block_size - num_rows
+        #                 output_padded = torch.cat([output, torch.zeros((batch_sz, padding_rows, num_cols), device=self.device)], dim=1)
+        #                 # Reshape the padded tensor to split each row into blocks of size 'block_size'
+        #                 output_reshaped = output_padded.view(batch_sz, num_blocks, block_size, num_cols)
+        #                 # print(output_reshaped.shape)
+        #                 # print(output_reshaped)
+        #                 # Take the absolute maximum within each block along the second dimension
+        #                 max_vals_within_blocks = torch.round(torch.max(torch.abs(output_reshaped), dim=2)[0])
+        #                 max_vals_within_blocks = torch.where(max_vals_within_blocks==0, torch.tensor(1.0, device=self.device), max_vals_within_blocks) # replace zeros with 1 to avoid None
+        #                 # print(max_vals_within_blocks)
+        #                 coeff = threshold_clamp/max_vals_within_blocks
 
-                        # 2) scale it
-                        output_reshaped = output_reshaped*coeff.unsqueeze(2)
-                        # output_reshaped = output_reshaped*max_vals_within_blocks.unsqueeze(1)
-                        # print(output_reshaped)
+        #                 # 2) scale it
+        #                 output_reshaped = output_reshaped*coeff.unsqueeze(2)
+        #                 # output_reshaped = output_reshaped*max_vals_within_blocks.unsqueeze(1)
+        #                 # print(output_reshaped)
 
-                        # 3) do FP8
-                        clamped_output = torch.clamp(torch.abs(output_reshaped), min=threshold_down, max=threshold_up)
-                        output_reshaped = torch.where(output_reshaped<0, -clamped_output, clamped_output)
-                        exponent_bits = torch.floor(torch.log2(torch.abs(output_reshaped))) + offset
-                        exponent = torch.pow(2, (exponent_bits - offset))
-                        mantissa_bits = torch.round(((output_reshaped / exponent) - 1) * scale)
-                        output_reshaped = ((mantissa_bits/scale) + 1) * exponent
+        #                 # 3) do FP8
+        #                 clamped_output = torch.clamp(torch.abs(output_reshaped), min=threshold_down, max=threshold_up)
+        #                 output_reshaped = torch.where(output_reshaped<0, -clamped_output, clamped_output)
+        #                 exponent_bits = torch.floor(torch.log2(torch.abs(output_reshaped))) + offset
+        #                 exponent = torch.pow(2, (exponent_bits - offset))
+        #                 mantissa_bits = torch.round(((output_reshaped / exponent) - 1) * scale)
+        #                 output_reshaped = ((mantissa_bits/scale) + 1) * exponent
 
-                        # 4) rescale back
-                        output_reshaped = output_reshaped/coeff.unsqueeze(2)
+        #                 # 4) rescale back
+        #                 output_reshaped = output_reshaped/coeff.unsqueeze(2)
 
-                        # 5) restore to original shape (de-blockize)
-                        # Now 'max_vals_within_blocks_flat' contains the maximum value within each block for each row
-                        output_padded_restored = output_reshaped.view(batch_sz, -1, num_cols)
-                        # Extract the unpadded part of the tensor
-                        output_restored = output_padded_restored[:, :num_rows, :]
-                    elif len(output.shape) == 2: #2D
+        #                 # 5) restore to original shape (de-blockize)
+        #                 # Now 'max_vals_within_blocks_flat' contains the maximum value within each block for each row
+        #                 output_padded_restored = output_reshaped.view(batch_sz, -1, num_cols)
+        #                 # Extract the unpadded part of the tensor
+        #                 output_restored = output_padded_restored[:, :num_rows, :]
+        #             elif len(output.shape) == 2: #2D
 
-                        # 1) blockize tensor
-                        num_rows, num_cols = output.shape
-                        # Reshape the tensor to split each row into blocks of size 'block_size'
-                        num_blocks = (num_rows + block_size - 1) // block_size
-                        # Pad the tensor along the rows if necessary (num_row is not divisible to block_size)
-                        padding_rows = num_blocks * block_size - num_rows
-                        output_padded = torch.cat([output, torch.zeros((padding_rows, num_cols), device=self.device)], dim=0)
-                        # Reshape the padded tensor to split each row into blocks of size 'block_size'
-                        output_reshaped = output_padded.view(num_blocks, block_size, num_cols)
-                        # print(output_reshaped.shape)
-                        # print(output_reshaped)
-                        # Take the absolute maximum within each block along the second dimension
-                        max_vals_within_blocks = torch.round(torch.max(torch.abs(output_reshaped), dim=1)[0])
-                        max_vals_within_blocks = torch.where(max_vals_within_blocks==0, torch.tensor(1.0, device=self.device), max_vals_within_blocks) # replace zeros with 1 to avoid None
-                        # print(max_vals_within_blocks)
-                        coeff = threshold_clamp/max_vals_within_blocks
+        #                 # 1) blockize tensor
+        #                 num_rows, num_cols = output.shape
+        #                 # Reshape the tensor to split each row into blocks of size 'block_size'
+        #                 num_blocks = (num_rows + block_size - 1) // block_size
+        #                 # Pad the tensor along the rows if necessary (num_row is not divisible to block_size)
+        #                 padding_rows = num_blocks * block_size - num_rows
+        #                 output_padded = torch.cat([output, torch.zeros((padding_rows, num_cols), device=self.device)], dim=0)
+        #                 # Reshape the padded tensor to split each row into blocks of size 'block_size'
+        #                 output_reshaped = output_padded.view(num_blocks, block_size, num_cols)
+        #                 # print(output_reshaped.shape)
+        #                 # print(output_reshaped)
+        #                 # Take the absolute maximum within each block along the second dimension
+        #                 max_vals_within_blocks = torch.round(torch.max(torch.abs(output_reshaped), dim=1)[0])
+        #                 max_vals_within_blocks = torch.where(max_vals_within_blocks==0, torch.tensor(1.0, device=self.device), max_vals_within_blocks) # replace zeros with 1 to avoid None
+        #                 # print(max_vals_within_blocks)
+        #                 coeff = threshold_clamp/max_vals_within_blocks
 
-                        # 2) scale it
-                        output_reshaped = output_reshaped*coeff.unsqueeze(1)
-                        # output_reshaped = output_reshaped*max_vals_within_blocks.unsqueeze(1)
-                        # print(output_reshaped)
+        #                 # 2) scale it
+        #                 output_reshaped = output_reshaped*coeff.unsqueeze(1)
+        #                 # output_reshaped = output_reshaped*max_vals_within_blocks.unsqueeze(1)
+        #                 # print(output_reshaped)
 
-                        # 3) do FP8
-                        clamped_output = torch.clamp(torch.abs(output_reshaped), min=threshold_down, max=threshold_up)
-                        output_reshaped = torch.where(output_reshaped<0, -clamped_output, clamped_output)
-                        exponent_bits = torch.floor(torch.log2(torch.abs(output_reshaped))) + offset
-                        exponent = torch.pow(2, (exponent_bits - offset))
-                        mantissa_bits = torch.round(((output_reshaped / exponent) - 1) * scale)
-                        output_reshaped = ((mantissa_bits/scale) + 1) * exponent
+        #                 # 3) do FP8
+        #                 clamped_output = torch.clamp(torch.abs(output_reshaped), min=threshold_down, max=threshold_up)
+        #                 output_reshaped = torch.where(output_reshaped<0, -clamped_output, clamped_output)
+        #                 exponent_bits = torch.floor(torch.log2(torch.abs(output_reshaped))) + offset
+        #                 exponent = torch.pow(2, (exponent_bits - offset))
+        #                 mantissa_bits = torch.round(((output_reshaped / exponent) - 1) * scale)
+        #                 output_reshaped = ((mantissa_bits/scale) + 1) * exponent
 
-                        # 4) rescale back
-                        output_reshaped = output_reshaped/coeff.unsqueeze(1)
+        #                 # 4) rescale back
+        #                 output_reshaped = output_reshaped/coeff.unsqueeze(1)
 
-                        # 5) restore to original shape (de-blockize)
-                        # Now 'max_vals_within_blocks_flat' contains the maximum value within each block for each row
-                        output_padded_restored = output_reshaped.view(-1, num_cols)
-                        # Extract the unpadded part of the tensor
-                        output_restored = output_padded_restored[:num_rows, :]
-                    else:
-                        print("out of shape")
-                    return output_restored
-            @staticmethod
-            def backward(ctx, grad_output):
-                grad_input = grad_output.clone()
-                return grad_input
+        #                 # 5) restore to original shape (de-blockize)
+        #                 # Now 'max_vals_within_blocks_flat' contains the maximum value within each block for each row
+        #                 output_padded_restored = output_reshaped.view(-1, num_cols)
+        #                 # Extract the unpadded part of the tensor
+        #                 output_restored = output_padded_restored[:num_rows, :]
+        #             else:
+        #                 print("out of shape")
+        #             return output_restored
+        #     @staticmethod
+        #     def backward(ctx, grad_output):
+        #         grad_input = grad_output.clone()
+        #         return grad_input
 
-        def activation_hook(module, input, output):
-            output = STEFunction_structured.apply(output)
-            return output
+        # def activation_hook(module, input, output):
+        #     output = STEFunction_structured.apply(output)
+        #     return output
 
-        EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
+        # EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
 
-        for name, module in self.model.named_modules():
-            if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
-                module.register_forward_hook(activation_hook)
+        # for name, module in self.model.named_modules():
+        #     if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
+        #         module.register_forward_hook(activation_hook)
 
         # This one is old
         # Simple MX spec for MXFP6 weights+activations
