@@ -436,8 +436,8 @@ class HuggingFaceAutoLM(BaseLM):
         # num_bit_mantissa  = 3        
         # microexponent
         block_size = 16
-        num_bit_exponent = 1
-        num_bit_mantissa  = 7
+        num_bit_exponent = 4
+        num_bit_mantissa  = 3
         offset = torch.tensor(2**(num_bit_exponent-1))
         scale = torch.tensor(2 ** num_bit_mantissa)
         threshold_clamp = 2**(num_bit_exponent-1)
