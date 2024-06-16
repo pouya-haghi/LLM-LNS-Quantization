@@ -352,6 +352,9 @@ class HuggingFaceAutoLM(BaseLM):
         threshold_up = float(2**threshold_clamp)
         threshold_down = float(2**-(threshold_clamp))
 
+        threshold_up = threshold_up/2
+        threshold_down = threshold_down*10
+
         # float32_tensor = torch.tensor(3.14159, dtype=torch.float32)
 
         # # Extract sign, exponent, and mantissa bits from the 32-bit float
