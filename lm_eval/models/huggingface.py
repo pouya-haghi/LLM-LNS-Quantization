@@ -382,10 +382,11 @@ class HuggingFaceAutoLM(BaseLM):
             def forward(ctx, input):
                 # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
                 # output = input.clone()
+                print("counter", counter.get_count())
                 if isinstance(input, tuple):
                     # Clone each tensor in the tuple
                     for t in input:
-                        print(t.shape)
+                        print("tuple", t.shape)
                     output = tuple(t.clone() for t in input)
                     output = tuple(torch.where(t < 0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
                     output = tuple(((torch.round(((t / torch.pow(2, (torch.floor(torch.log2(torch.abs(t)))))) - 1) * scale)/scale) + 1) * torch.pow(2, (torch.floor(torch.log2(torch.abs(t))))) for t in output)
@@ -426,7 +427,7 @@ class HuggingFaceAutoLM(BaseLM):
             output = STEFunction_structured.apply(output)
             # for keeping track of activations
             # list_output_activation[str(module.__class__.__name__)+str("_")+str(counter.get_count())] = output #$$$
-            # counter.increase() #$$$
+            counter.increase() #$$$
             return output
 
         EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
