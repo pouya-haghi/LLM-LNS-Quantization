@@ -365,16 +365,16 @@ class HuggingFaceAutoLM(BaseLM):
         # apx_float = ((mantissa_bits/scale) + 1) * exponent
 
         # For keeping track of activations:
-        # class ReferenceCounter:
-        #     def __init__(self):
-        #         self.count = 0
-        #     def increase(self):
-        #         self.count += 1
-        #     def get_count(self):
-        #         return self.count
+        class ReferenceCounter:
+            def __init__(self):
+                self.count = 0
+            def increase(self):
+                self.count += 1
+            def get_count(self):
+                return self.count
 
-        # counter = ReferenceCounter()
-        # list_output_activation = {}
+        counter = ReferenceCounter()
+        list_output_activation = {}
 
         class STEFunction_structured(torch.autograd.Function):
             """ define straight through estimator with overrided gradient (gate) """
