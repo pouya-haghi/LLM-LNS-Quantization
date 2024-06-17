@@ -375,6 +375,8 @@ class HuggingFaceAutoLM(BaseLM):
 
         counter = ReferenceCounter()
         list_output_activation = {}
+        ours_std = 0
+        true_std = 0
 
         class STEFunction_structured(torch.autograd.Function):
             """ define straight through estimator with overrided gradient (gate) """
@@ -390,8 +392,13 @@ class HuggingFaceAutoLM(BaseLM):
                     # for t in input:
                     #     print("tuple", t.shape)
                     # print("from tuple")
-                    with open('output.txt', 'a') as file:
-                        file.write("from tuple")
+                    # with open('output.txt', 'a') as file:
+                    #     file.write("from tuple")
+                    if counter.get_count() < 21938:
+                        for h in input:
+                            ours_std += torch.std(h)
+                    for z in input:
+                        true_std += torch.std(z)
                     output = tuple(t.clone() for t in input)
                     output = tuple(torch.where(t < 0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
                     output = tuple(((torch.round(((t / torch.pow(2, (torch.floor(torch.log2(torch.abs(t)))))) - 1) * scale)/scale) + 1) * torch.pow(2, (torch.floor(torch.log2(torch.abs(t))))) for t in output)
@@ -399,6 +406,9 @@ class HuggingFaceAutoLM(BaseLM):
                 else:
                     # If input is not a tuple, clone it
                     # print(input.shape)
+                    if counter.get_count() < 21938:
+                        ours_std += torch.std(input)
+                    true_std += torch.std(input)
                     output = input.clone()
                     # print(output.dtype)
                     # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
