@@ -375,8 +375,8 @@ class HuggingFaceAutoLM(BaseLM):
 
         counter = ReferenceCounter()
         list_output_activation = {}
-        ours_std = 0
-        true_std = 0
+        ours_std = torch.tensor(0.0, dtype=torch.float32)
+        true_std = torch.tensor(0.0, dtype=torch.float32)
 
         class STEFunction_structured(torch.autograd.Function):
             """ define straight through estimator with overrided gradient (gate) """
@@ -385,8 +385,8 @@ class HuggingFaceAutoLM(BaseLM):
                 # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
                 # output = input.clone()
                 # print("counter", counter.get_count())
-                with open('output.txt', 'a') as file:
-                    file.write("counter: " + str(counter.get_count())+ "\n")
+                # with open('output.txt', 'a') as file:
+                #     file.write("counter: " + str(counter.get_count())+ "\n")
                 if isinstance(input, tuple):
                     # Clone each tensor in the tuple
                     # for t in input:
@@ -396,11 +396,11 @@ class HuggingFaceAutoLM(BaseLM):
                     #     file.write("from tuple")
                     if counter.get_count() < 21938:
                         for h in input:
-                            ours_std += torch.std(h)
+                            ours_std += torch.std(h).cpu()
                         with open('output_ours.txt', 'a') as file:
                             file.write("sum (std): " + str(ours_std)+ "\n")
                     for z in input:
-                        true_std += torch.std(z)
+                        true_std += torch.std(z).cpu()
                     with open('output_true.txt', 'a') as file:
                         file.write("sum (std): " + str(true_std)+ "\n")
                     output = tuple(t.clone() for t in input)
@@ -411,10 +411,10 @@ class HuggingFaceAutoLM(BaseLM):
                     # If input is not a tuple, clone it
                     # print(input.shape)
                     if counter.get_count() < 21938:
-                        ours_std += torch.std(input)
+                        ours_std += torch.std(input).cpu()
                         with open('output_ours.txt', 'a') as file:
                             file.write("sum (std): " + str(ours_std)+ "\n")
-                    true_std += torch.std(input)
+                    true_std += torch.std(input).cpu()
                     with open('output_true.txt', 'a') as file:
                         file.write("sum (std): " + str(true_std)+ "\n")
                     output = input.clone()
