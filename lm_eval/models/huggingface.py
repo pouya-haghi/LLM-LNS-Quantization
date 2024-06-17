@@ -396,7 +396,7 @@ class HuggingFaceAutoLM(BaseLM):
                     # with open('output.txt', 'a') as file:
                     #     file.write("from tuple")
                     output = tuple(t.clone() for t in input)
-                    if counter.get_count() < 8420:
+                    if counter.get_count() < 10969:
                         for h in output:
                             counter.ours_std += torch.std(h).cpu()
                         with open('output_ours.txt', 'a') as file:
@@ -414,7 +414,7 @@ class HuggingFaceAutoLM(BaseLM):
                     # print(input.shape)
                     output = input.clone()
                     # print("std", output)
-                    if counter.get_count() < 8420:
+                    if counter.get_count() < 10969:
                         counter.ours_std += torch.std(output).cpu()
                         with open('output_ours.txt', 'a') as file:
                             file.write("sum (std): " + str(counter.ours_std)+ "\n")
