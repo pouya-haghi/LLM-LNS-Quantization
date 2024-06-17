@@ -368,6 +368,8 @@ class HuggingFaceAutoLM(BaseLM):
         class ReferenceCounter:
             def __init__(self):
                 self.count = 0
+                self.ours_std = torch.tensor(0.0, dtype=torch.float32)
+                self.true_std = torch.tensor(0.0, dtype=torch.float32)
             def increase(self):
                 self.count += 1
             def get_count(self):
@@ -375,8 +377,7 @@ class HuggingFaceAutoLM(BaseLM):
 
         counter = ReferenceCounter()
         list_output_activation = {}
-        ours_std = torch.tensor(0.0, dtype=torch.float32)
-        true_std = torch.tensor(0.0, dtype=torch.float32)
+
 
         class STEFunction_structured(torch.autograd.Function):
             """ define straight through estimator with overrided gradient (gate) """
@@ -396,13 +397,13 @@ class HuggingFaceAutoLM(BaseLM):
                     #     file.write("from tuple")
                     if counter.get_count() < 21938:
                         for h in input:
-                            ours_std += torch.std(h).cpu()
+                            counter.ours_std += torch.std(h).cpu()
                         with open('output_ours.txt', 'a') as file:
-                            file.write("sum (std): " + str(ours_std)+ "\n")
+                            file.write("sum (std): " + str(counter.ours_std)+ "\n")
                     for z in input:
-                        true_std += torch.std(z).cpu()
+                        counter.true_std += torch.std(z).cpu()
                     with open('output_true.txt', 'a') as file:
-                        file.write("sum (std): " + str(true_std)+ "\n")
+                        file.write("sum (std): " + str(counter.true_std)+ "\n")
                     output = tuple(t.clone() for t in input)
                     output = tuple(torch.where(t < 0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
                     output = tuple(((torch.round(((t / torch.pow(2, (torch.floor(torch.log2(torch.abs(t)))))) - 1) * scale)/scale) + 1) * torch.pow(2, (torch.floor(torch.log2(torch.abs(t))))) for t in output)
@@ -411,12 +412,12 @@ class HuggingFaceAutoLM(BaseLM):
                     # If input is not a tuple, clone it
                     # print(input.shape)
                     if counter.get_count() < 21938:
-                        ours_std += torch.std(input).cpu()
+                        counter.ours_std += torch.std(input).cpu()
                         with open('output_ours.txt', 'a') as file:
-                            file.write("sum (std): " + str(ours_std)+ "\n")
-                    true_std += torch.std(input).cpu()
+                            file.write("sum (std): " + str(counter.ours_std)+ "\n")
+                    counter.true_std += torch.std(input).cpu()
                     with open('output_true.txt', 'a') as file:
-                        file.write("sum (std): " + str(true_std)+ "\n")
+                        file.write("sum (std): " + str(counter.true_std)+ "\n")
                     output = input.clone()
                     # print(output.dtype)
                     # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
