@@ -396,16 +396,16 @@ class HuggingFaceAutoLM(BaseLM):
                     # with open('output.txt', 'a') as file:
                     #     file.write("from tuple")
                     output = tuple(t.clone() for t in input)
-                    if counter.get_count() < 13462:
-                        for h in output:
-                            counter.ours_std += torch.std(h).cpu()
-                        with open('output_ours.txt', 'a') as file:
-                            file.write("sum (std): " + str(counter.ours_std)+ "\n")
-                    for z in output:
-                        print("std", z)
-                        counter.true_std += torch.std(z).cpu()
-                    with open('output_true.txt', 'a') as file:
-                        file.write("sum (std): " + str(counter.true_std)+ "\n")
+                    # if counter.get_count() < 13462:
+                    #     for h in output:
+                    #         counter.ours_std += torch.std(h).cpu()
+                    #     with open('output_ours.txt', 'a') as file:
+                    #         file.write("sum (std): " + str(counter.ours_std)+ "\n")
+                    # for z in output:
+                    #     print("std", z)
+                    #     counter.true_std += torch.std(z).cpu()
+                    # with open('output_true.txt', 'a') as file:
+                        # file.write("sum (std): " + str(counter.true_std)+ "\n")
                     output = tuple(torch.where(t < 0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
                     output = tuple(((torch.round(((t / torch.pow(2, (torch.floor(torch.log2(torch.abs(t)))))) - 1) * scale)/scale) + 1) * torch.pow(2, (torch.floor(torch.log2(torch.abs(t))))) for t in output)
                     return output                
@@ -414,13 +414,13 @@ class HuggingFaceAutoLM(BaseLM):
                     # print(input.shape)
                     output = input.clone()
                     print("std", output)
-                    if counter.get_count() < 13462:
-                        counter.ours_std += torch.std(output).cpu()
-                        with open('output_ours.txt', 'a') as file:
-                            file.write("sum (std): " + str(counter.ours_std)+ "\n")
-                    counter.true_std += torch.std(output).cpu()
-                    with open('output_true.txt', 'a') as file:
-                        file.write("sum (std): " + str(counter.true_std)+ "\n")
+                    # if counter.get_count() < 13462:
+                    #     counter.ours_std += torch.std(output).cpu()
+                    #     with open('output_ours.txt', 'a') as file:
+                    #         file.write("sum (std): " + str(counter.ours_std)+ "\n")
+                    # counter.true_std += torch.std(output).cpu()
+                    # with open('output_true.txt', 'a') as file:
+                    #     file.write("sum (std): " + str(counter.true_std)+ "\n")
                     # print(output.dtype)
                     # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
                     clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
