@@ -385,15 +385,16 @@ class HuggingFaceAutoLM(BaseLM):
                 print("counter", counter.get_count())
                 if isinstance(input, tuple):
                     # Clone each tensor in the tuple
-                    for t in input:
-                        print("tuple", t.shape)
+                    # for t in input:
+                    #     print("tuple", t.shape)
+                    print("from tuple")
                     output = tuple(t.clone() for t in input)
                     output = tuple(torch.where(t < 0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
                     output = tuple(((torch.round(((t / torch.pow(2, (torch.floor(torch.log2(torch.abs(t)))))) - 1) * scale)/scale) + 1) * torch.pow(2, (torch.floor(torch.log2(torch.abs(t))))) for t in output)
                     return output                
                 else:
                     # If input is not a tuple, clone it
-                    print(input.shape)
+                    # print(input.shape)
                     output = input.clone()
                     # print(output.dtype)
                     # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
