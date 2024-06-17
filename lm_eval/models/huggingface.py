@@ -382,16 +382,16 @@ class HuggingFaceAutoLM(BaseLM):
             def forward(ctx, input):
                 # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
                 # output = input.clone()
-                # print("counter", counter.get_count())
-                with open('output.txt', 'a') as file:
-                    file.write("counter: " + str(counter.get_count())+ "\n")
+                print("counter", counter.get_count())
+                # with open('output.txt', 'a') as file:
+                #     file.write("counter: " + str(counter.get_count())+ "\n")
                 if isinstance(input, tuple):
                     # Clone each tensor in the tuple
                     # for t in input:
                     #     print("tuple", t.shape)
-                    # print("from tuple")
-                    with open('output.txt', 'a') as file:
-                        file.write("from tuple")
+                    print("from tuple")
+                    # with open('output.txt', 'a') as file:
+                    #     file.write("from tuple")
                     output = tuple(t.clone() for t in input)
                     output = tuple(torch.where(t < 0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
                     output = tuple(((torch.round(((t / torch.pow(2, (torch.floor(torch.log2(torch.abs(t)))))) - 1) * scale)/scale) + 1) * torch.pow(2, (torch.floor(torch.log2(torch.abs(t))))) for t in output)
