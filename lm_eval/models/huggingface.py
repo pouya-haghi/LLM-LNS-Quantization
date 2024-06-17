@@ -402,7 +402,7 @@ class HuggingFaceAutoLM(BaseLM):
                         with open('output_ours.txt', 'a') as file:
                             file.write("sum (std): " + str(counter.ours_std)+ "\n")
                     for z in output:
-                        # print("std", torch.std(z).cpu())
+                        print("std", torch.std(z).cpu())
                         counter.true_std += torch.std(z).cpu()
                     with open('output_true.txt', 'a') as file:
                         file.write("sum (std): " + str(counter.true_std)+ "\n")
@@ -413,7 +413,7 @@ class HuggingFaceAutoLM(BaseLM):
                     # If input is not a tuple, clone it
                     # print(input.shape)
                     output = input.clone()
-                    # print("std", torch.std(output).cpu())
+                    print("std", torch.std(output).cpu())
                     if counter.get_count() < 13462:
                         counter.ours_std += torch.std(output).cpu()
                         with open('output_ours.txt', 'a') as file:
