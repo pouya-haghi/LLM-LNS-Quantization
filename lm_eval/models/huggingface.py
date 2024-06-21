@@ -1718,7 +1718,19 @@ class HuggingFaceAutoLM(BaseLM):
         # PH: end
 
         # PH: start dynamic LNS4 with per-vector quant only for weight quantization
+        
         # Weight Quantization:
+        num_bit_mantissa = 3 # for 8 bit repr.
+        threshold_mantissa = 2**(num_bit_mantissa-1)
+        threshold_up = float(4**threshold_mantissa)
+        threshold_down = float(4**-(threshold_mantissa))
+        num_frac_low_prec = 0 # number of fractional bits for 8 bit repr.
+        num_frac_high_prec = num_frac_low_prec + 1 # 13
+        scale_low_prec = 4**(num_frac_low_prec)
+        scale_high_prec = 4**(num_frac_high_prec)
+        num_frac_highest_prec = num_frac_high_prec + 4 # for extreme outliers
+        scale_highest_prec = 4**(num_frac_highest_prec)
+
         for name, param in self.model.named_parameters():
             if "norm" not in name: # Quantize both Linear and Conv
                 output = param.data
