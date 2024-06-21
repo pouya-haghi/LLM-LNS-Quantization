@@ -1601,122 +1601,137 @@ class HuggingFaceAutoLM(BaseLM):
 
         # # # PH: start (modified LNS4) ---- BASE 4 logarithm
         # # num_bit_mantissa = 5 # for 16 bit repr.
-        # num_bit_mantissa = 3 # for 8 bit repr.
-        # threshold_mantissa = 2**(num_bit_mantissa-1)
-        # threshold_up = float(4**threshold_mantissa)
-        # threshold_down = float(4**-(threshold_mantissa))
+        num_bit_mantissa = 3 # for 8 bit repr.
+        threshold_mantissa = 2**(num_bit_mantissa-1)
+        threshold_up = float(4**threshold_mantissa)
+        threshold_down = float(4**-(threshold_mantissa))
 
-        # # new version:
-        # # max_num_bit_mantissa_needed = 1 # according to the distribution you can get this number
-        # # log_domain_threshold = 2** max_num_bit_mantissa_needed # 4
-        # # real_domain_threshold_up = float(2**log_domain_threshold) # 16
-        # # real_domain_threshold_down = float(2**(-log_domain_threshold)) # 1/16
+        # new version:
+        # max_num_bit_mantissa_needed = 1 # according to the distribution you can get this number
+        # log_domain_threshold = 2** max_num_bit_mantissa_needed # 4
+        # real_domain_threshold_up = float(2**log_domain_threshold) # 16
+        # real_domain_threshold_down = float(2**(-log_domain_threshold)) # 1/16
 
-        # # num_frac_low_prec = 10 # number of fractional bits for 16 bit repr.
-        # num_frac_low_prec = 0 # number of fractional bits for 8 bit repr.
-        # # num_frac_high_prec = num_frac_low_prec + (num_bit_mantissa-max_num_bit_mantissa_needed) # 13
-        # num_frac_high_prec = num_frac_low_prec + 1 # 13
-        # scale_low_prec = 4**(num_frac_low_prec)
-        # scale_high_prec = 4**(num_frac_high_prec)
-        # # v3:
-        # num_frac_highest_prec = num_frac_high_prec + 4 # for extreme outliers
-        # scale_highest_prec = 4**(num_frac_highest_prec)
+        # num_frac_low_prec = 10 # number of fractional bits for 16 bit repr.
+        num_frac_low_prec = 0 # number of fractional bits for 8 bit repr.
+        # num_frac_high_prec = num_frac_low_prec + (num_bit_mantissa-max_num_bit_mantissa_needed) # 13
+        num_frac_high_prec = num_frac_low_prec + 1 # 13
+        scale_low_prec = 4**(num_frac_low_prec)
+        scale_high_prec = 4**(num_frac_high_prec)
+        # v3:
+        num_frac_highest_prec = num_frac_high_prec + 4 # for extreme outliers
+        scale_highest_prec = 4**(num_frac_highest_prec)
 
-        # # For keeping track of activations:
-        # # class ReferenceCounter:
-        # #     def __init__(self):
-        # #         self.count = 0
-        # #     def increase(self):
-        # #         self.count += 1
-        # #     def get_count(self):
-        # #         return self.count
+        # For keeping track of activations:
+        # class ReferenceCounter:
+        #     def __init__(self):
+        #         self.count = 0
+        #     def increase(self):
+        #         self.count += 1
+        #     def get_count(self):
+        #         return self.count
 
-        # # counter = ReferenceCounter()
-        # # list_output_activation = {}
+        # counter = ReferenceCounter()
+        # list_output_activation = {}
 
-        # class STEFunction_structured(torch.autograd.Function):
-        #     """ define straight through estimator with overrided gradient (gate) """
-        #     @staticmethod
-        #     def forward(ctx, input):
-        #         ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
-        #         if isinstance(input, tuple):
-        #             output = tuple(t.clone() for t in input)
-        #             output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
-        #             # output = tuple(torch.where(t > 0, torch.pow(2, torch.where(torch.log2(t)>torch.max(torch.log2(t))-5, torch.where(torch.log2(t)>torch.max(torch.log2(t))-3, torch.round(torch.log2(t) * scale_highest_prec)/ scale_highest_prec, torch.round(torch.log2(t) * scale_high_prec)/ scale_high_prec), torch.round(torch.log2(t) * scale_low_prec)/ scale_low_prec)), torch.where(t < 0, -torch.pow(2, torch.where(torch.log2(-t)>torch.max(torch.log2(-t))-5, torch.where(torch.log2(-t)>torch.max(torch.log2(-t))-3, torch.round(torch.log2(-t) * scale_highest_prec)/ scale_highest_prec, torch.round(torch.log2(-t) * scale_high_prec)/ scale_high_prec), torch.round(torch.log2(-t) * scale_low_prec)/ scale_low_prec)), t)) for t in output)
-        #             # output = tuple(torch.where(t > 0, torch.pow(4, torch.where((torch.log2(t)/2)>torch.max((torch.log2(t)/2))-4, torch.where((torch.log2(t)/2)>torch.max((torch.log2(t)/2))-3, torch.round((torch.log2(t)/2) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(t)/2) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(t)/2) * scale_low_prec)/ scale_low_prec)), torch.where(t < 0, -torch.pow(4, torch.where((torch.log2(-t)/2)>torch.max((torch.log2(-t)/2))-4, torch.where((torch.log2(-t)/2)>torch.max((torch.log2(-t)/2))-3, torch.round((torch.log2(-t)/2) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(-t)/2) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(-t)/2) * scale_low_prec)/ scale_low_prec)), t)) for t in output)                    
-        #             # output = tuple(torch.where(t > 0, torch.pow(2, torch.where((torch.log2(t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-4, torch.where((torch.log2(t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-3, torch.round((torch.log2(t)) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(t)) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(t)) * scale_low_prec)/ scale_low_prec)), torch.where(t < 0, -torch.pow(2, torch.where((torch.log2(-t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-4, torch.where((torch.log2(-t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-3, torch.round((torch.log2(-t)) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(-t)) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(-t)) * scale_low_prec)/ scale_low_prec)), t)) for t in output)              
-        #             output = tuple(torch.where(t<0, -(torch.pow(4, torch.where(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0)))>torch.max(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))), dim=0).values.unsqueeze(0).expand_as(t)-5, torch.where(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0)))>torch.max(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))), dim=0).values.unsqueeze(0).expand_as(t)-3, torch.round(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))) * scale_highest_prec)/ scale_highest_prec, torch.round(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))) * scale_high_prec)/ scale_high_prec), torch.round(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))) * scale_low_prec)/ scale_low_prec))), torch.where(t>0, torch.pow(4, torch.where(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0)))>torch.max(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))), dim=0).values.unsqueeze(0).expand_as(t)-5, torch.where(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0)))>torch.max(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))), dim=0).values.unsqueeze(0).expand_as(t)-3, torch.round(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))) * scale_highest_prec)/ scale_highest_prec, torch.round(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))) * scale_high_prec)/ scale_high_prec), torch.round(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))) * scale_low_prec)/ scale_low_prec)), t)) for t in output)
-        #             return output
-        #         else:
-        #             output = input.clone()
-        #             # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
-        #             clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
-        #             output = torch.where(output<0, -clamped_output, clamped_output)
-        #             # v3:
-        #             log_x = torch.where(output<0, torch.log2(-output)/2, torch.where(output > 0, torch.log2(output)/2, torch.tensor(-64000.0)))
-        #             quant_exponent_low_prec = torch.round(log_x * scale_low_prec)/ scale_low_prec # 2**3 - round(+ 0.5)
-        #             quant_exponent_high_prec = torch.round(log_x * scale_high_prec)/ scale_high_prec # 2**3 - round(+ 0.5)
-        #             quant_exponent_highest_prec = torch.round(log_x * scale_highest_prec)/ scale_highest_prec # 2**3 - round(+ 0.5)
-        #             if len(output.shape) == 3: # 3D
-        #                 max_val = torch.max(log_x, dim=1).values.unsqueeze(1).expand_as(log_x)
-        #             elif len(output.shape) == 2: # 2D
-        #                 max_val = torch.max(log_x, dim=0).values.unsqueeze(0).expand_as(log_x)
-        #             else:
-        #                 print("Out of shape")
-        #             quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
-        #             output = torch.where(output<0, -(torch.pow(4, quant_exponent)), torch.where(output>0, torch.pow(4, quant_exponent), output))
+        class STEFunction_structured(torch.autograd.Function):
+            """ define straight through estimator with overrided gradient (gate) """
+            @staticmethod
+            def forward(ctx, input):
+                ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
+                if isinstance(input, tuple):
+                    output = tuple(t.clone() for t in input)
+                    output = tuple(torch.where(t<0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
+                    # output = tuple(torch.where(t > 0, torch.pow(2, torch.where(torch.log2(t)>torch.max(torch.log2(t))-5, torch.where(torch.log2(t)>torch.max(torch.log2(t))-3, torch.round(torch.log2(t) * scale_highest_prec)/ scale_highest_prec, torch.round(torch.log2(t) * scale_high_prec)/ scale_high_prec), torch.round(torch.log2(t) * scale_low_prec)/ scale_low_prec)), torch.where(t < 0, -torch.pow(2, torch.where(torch.log2(-t)>torch.max(torch.log2(-t))-5, torch.where(torch.log2(-t)>torch.max(torch.log2(-t))-3, torch.round(torch.log2(-t) * scale_highest_prec)/ scale_highest_prec, torch.round(torch.log2(-t) * scale_high_prec)/ scale_high_prec), torch.round(torch.log2(-t) * scale_low_prec)/ scale_low_prec)), t)) for t in output)
+                    # output = tuple(torch.where(t > 0, torch.pow(4, torch.where((torch.log2(t)/2)>torch.max((torch.log2(t)/2))-4, torch.where((torch.log2(t)/2)>torch.max((torch.log2(t)/2))-3, torch.round((torch.log2(t)/2) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(t)/2) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(t)/2) * scale_low_prec)/ scale_low_prec)), torch.where(t < 0, -torch.pow(4, torch.where((torch.log2(-t)/2)>torch.max((torch.log2(-t)/2))-4, torch.where((torch.log2(-t)/2)>torch.max((torch.log2(-t)/2))-3, torch.round((torch.log2(-t)/2) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(-t)/2) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(-t)/2) * scale_low_prec)/ scale_low_prec)), t)) for t in output)                    
+                    # output = tuple(torch.where(t > 0, torch.pow(2, torch.where((torch.log2(t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-4, torch.where((torch.log2(t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-3, torch.round((torch.log2(t)) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(t)) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(t)) * scale_low_prec)/ scale_low_prec)), torch.where(t < 0, -torch.pow(2, torch.where((torch.log2(-t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-4, torch.where((torch.log2(-t))>torch.max(t, dim=0).values.unsqueeze(0).expand_as(t)-3, torch.round((torch.log2(-t)) * scale_highest_prec)/ scale_highest_prec, torch.round((torch.log2(-t)) * scale_high_prec)/ scale_high_prec), torch.round((torch.log2(-t)) * scale_low_prec)/ scale_low_prec)), t)) for t in output)              
+                    output = tuple(torch.where(t<0, -(torch.pow(4, torch.where(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0)))>torch.max(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))), dim=0).values.unsqueeze(0).expand_as(t)-5, torch.where(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0)))>torch.max(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))), dim=0).values.unsqueeze(0).expand_as(t)-3, torch.round(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))) * scale_highest_prec)/ scale_highest_prec, torch.round(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))) * scale_high_prec)/ scale_high_prec), torch.round(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))) * scale_low_prec)/ scale_low_prec))), torch.where(t>0, torch.pow(4, torch.where(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0)))>torch.max(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))), dim=0).values.unsqueeze(0).expand_as(t)-5, torch.where(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0)))>torch.max(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))), dim=0).values.unsqueeze(0).expand_as(t)-3, torch.round(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))) * scale_highest_prec)/ scale_highest_prec, torch.round(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))) * scale_high_prec)/ scale_high_prec), torch.round(torch.where(t<0, torch.log2(-t)/2, torch.where(t > 0, torch.log2(t)/2, torch.tensor(-64000.0))) * scale_low_prec)/ scale_low_prec)), t)) for t in output)
+                    return output
+                else:
+                    output = input.clone()
+                    # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
+                    clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
+                    output = torch.where(output<0, -clamped_output, clamped_output)
+                    # v3:
+                    log_x = torch.where(output<0, torch.log2(-output)/2, torch.where(output > 0, torch.log2(output)/2, torch.tensor(-64000.0)))
+                    quant_exponent_low_prec = torch.round(log_x * scale_low_prec)/ scale_low_prec # 2**3 - round(+ 0.5)
+                    quant_exponent_high_prec = torch.round(log_x * scale_high_prec)/ scale_high_prec # 2**3 - round(+ 0.5)
+                    quant_exponent_highest_prec = torch.round(log_x * scale_highest_prec)/ scale_highest_prec # 2**3 - round(+ 0.5)
+                    if len(output.shape) == 3: # 3D
+                        max_val = torch.max(log_x, dim=1).values.unsqueeze(1).expand_as(log_x)
+                    elif len(output.shape) == 2: # 2D
+                        max_val = torch.max(log_x, dim=0).values.unsqueeze(0).expand_as(log_x)
+                    else:
+                        print("Out of shape")
+                    quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
+                    output = torch.where(output<0, -(torch.pow(4, quant_exponent)), torch.where(output>0, torch.pow(4, quant_exponent), output))
 
 
-        #             # v3:
-        #             # if len(output.shape) == 3: # 3D
-        #             #   non_zero_indices = output.nonzero()
-        #             #   non_zero_values = output[non_zero_indices[:, 0], non_zero_indices[:, 1], non_zero_indices[:, 2]] # 0 because the first dimension is batch, 1 b/c next one is first dimension of feature, 2 b/c it is second dimension of features
-        #             #   # if 1D: non_zero_indices
-        #             #   if len(non_zero_values) > 0: # any nonzero avail
-        #             #     log_x = torch.where(non_zero_values > 0, torch.log2(non_zero_values), torch.log2(-non_zero_values))
-        #             #     quant_exponent_low_prec = torch.round(log_x * scale_low_prec)/ scale_low_prec # 2**3 - round(+ 0.5)
-        #             #     quant_exponent_high_prec = torch.round(log_x * scale_high_prec)/ scale_high_prec # 2**3 - round(+ 0.5)
-        #             #     # --------  v3 (including extreme outliers) ---------
-        #             #     quant_exponent_highest_prec = torch.round(log_x * scale_highest_prec)/ scale_highest_prec # 2**3 - round(+ 0.5)
-        #             #     print(log_x.shape)
-        #             #     max_val = torch.max(log_x, dim=1).values.unsqueeze(1).expand_as(log_x)
-        #             #     quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
-        #             #     # ------- end v3 ---------
-        #             #     quantized_values = torch.where(non_zero_values > 0, torch.pow(2, quant_exponent), -(torch.pow(2, quant_exponent)))
-        #             #     output[non_zero_indices[:, 0], non_zero_indices[:, 1], non_zero_indices[:, 2]] = quantized_values
-        #             # elif len(output.shape) == 2: # 2D
-        #             #   non_zero_indices = output.nonzero()
-        #             #   non_zero_values = output[non_zero_indices[:, 0], non_zero_indices[:, 1]] # 0 because the first dimension is batch, 1 b/c next one is first dimension of feature, 2 b/c it is second dimension of features
-        #             #   if len(non_zero_values) > 0:
-        #             #     log_x = torch.where(non_zero_values > 0, torch.log2(non_zero_values), torch.log2(-non_zero_values))
-        #             #     quant_exponent_low_prec = torch.round(log_x * scale_low_prec) / scale_low_prec # 2**3 - round(+ 0.5)
-        #             #     quant_exponent_high_prec = torch.round(log_x * scale_high_prec) / scale_high_prec # 2**3 - round(+ 0.5)
-        #             #     # --------  v3 (including extreme outliers) ---------
-        #             #     quant_exponent_highest_prec = torch.round(log_x * scale_highest_prec)/ scale_highest_prec # 2**3 - round(+ 0.5)
-        #             #     max_val = torch.max(log_x, dim=0).values.unsqueeze(0).expand_as(log_x)
-        #             #     quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
-        #             #     # ------- end v3 ---------
-        #             #     quantized_values = torch.where(non_zero_values > 0, torch.pow(2, quant_exponent), -(torch.pow(2, quant_exponent)))
-        #             #     output[non_zero_indices[:, 0], non_zero_indices[:, 1]] = quantized_values
-        #             # else:
-        #             #   print("Out of shape")
-        #             return output
+                    # v3:
+                    # if len(output.shape) == 3: # 3D
+                    #   non_zero_indices = output.nonzero()
+                    #   non_zero_values = output[non_zero_indices[:, 0], non_zero_indices[:, 1], non_zero_indices[:, 2]] # 0 because the first dimension is batch, 1 b/c next one is first dimension of feature, 2 b/c it is second dimension of features
+                    #   # if 1D: non_zero_indices
+                    #   if len(non_zero_values) > 0: # any nonzero avail
+                    #     log_x = torch.where(non_zero_values > 0, torch.log2(non_zero_values), torch.log2(-non_zero_values))
+                    #     quant_exponent_low_prec = torch.round(log_x * scale_low_prec)/ scale_low_prec # 2**3 - round(+ 0.5)
+                    #     quant_exponent_high_prec = torch.round(log_x * scale_high_prec)/ scale_high_prec # 2**3 - round(+ 0.5)
+                    #     # --------  v3 (including extreme outliers) ---------
+                    #     quant_exponent_highest_prec = torch.round(log_x * scale_highest_prec)/ scale_highest_prec # 2**3 - round(+ 0.5)
+                    #     print(log_x.shape)
+                    #     max_val = torch.max(log_x, dim=1).values.unsqueeze(1).expand_as(log_x)
+                    #     quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
+                    #     # ------- end v3 ---------
+                    #     quantized_values = torch.where(non_zero_values > 0, torch.pow(2, quant_exponent), -(torch.pow(2, quant_exponent)))
+                    #     output[non_zero_indices[:, 0], non_zero_indices[:, 1], non_zero_indices[:, 2]] = quantized_values
+                    # elif len(output.shape) == 2: # 2D
+                    #   non_zero_indices = output.nonzero()
+                    #   non_zero_values = output[non_zero_indices[:, 0], non_zero_indices[:, 1]] # 0 because the first dimension is batch, 1 b/c next one is first dimension of feature, 2 b/c it is second dimension of features
+                    #   if len(non_zero_values) > 0:
+                    #     log_x = torch.where(non_zero_values > 0, torch.log2(non_zero_values), torch.log2(-non_zero_values))
+                    #     quant_exponent_low_prec = torch.round(log_x * scale_low_prec) / scale_low_prec # 2**3 - round(+ 0.5)
+                    #     quant_exponent_high_prec = torch.round(log_x * scale_high_prec) / scale_high_prec # 2**3 - round(+ 0.5)
+                    #     # --------  v3 (including extreme outliers) ---------
+                    #     quant_exponent_highest_prec = torch.round(log_x * scale_highest_prec)/ scale_highest_prec # 2**3 - round(+ 0.5)
+                    #     max_val = torch.max(log_x, dim=0).values.unsqueeze(0).expand_as(log_x)
+                    #     quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
+                    #     # ------- end v3 ---------
+                    #     quantized_values = torch.where(non_zero_values > 0, torch.pow(2, quant_exponent), -(torch.pow(2, quant_exponent)))
+                    #     output[non_zero_indices[:, 0], non_zero_indices[:, 1]] = quantized_values
+                    # else:
+                    #   print("Out of shape")
+                    return output
 
-        #     @staticmethod
-        #     def backward(ctx, grad_output):
-        #         # aux1 = ctx.saved_tensors # if you want to use input during backward calculation
-        #         grad_input = grad_output.clone()
-        #         return grad_input
+            @staticmethod
+            def backward(ctx, grad_output):
+                # aux1 = ctx.saved_tensors # if you want to use input during backward calculation
+                grad_input = grad_output.clone()
+                return grad_input
 
-        # def activation_hook(module, input, output):
-        #     output = STEFunction_structured.apply(output)
-        #     return output
+        def activation_hook(module, input, output):
+            output = STEFunction_structured.apply(output)
+            return output
 
-        # EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
+        # Weight Quantization:
+        for name, param in self.model.named_parameters():
+            if "norm" not in name: # Quantize both Linear and Conv
+                original_array = param.data
+                # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
+                clamped_output = torch.clamp(torch.abs(original_array), min=threshold_down, max=threshold_up)
+                original_array = torch.where(original_array<0, -clamped_output, clamped_output)
+                #
+                exponent_bits = torch.floor(torch.log2(torch.abs(original_array))) + offset
+                exponent = torch.pow(2, (exponent_bits - offset))
+                mantissa_bits = torch.round(((original_array / exponent) - 1) * scale)
+                original_array = ((mantissa_bits/scale) + 1) * exponent
+                param.data = original_array # write back
+        # end of weight quantization
 
-        # for name, module in self.model.named_modules():
-        #     if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
-        #         module.register_forward_hook(activation_hook)
+        EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
+
+        for name, module in self.model.named_modules():
+            if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
+                module.register_forward_hook(activation_hook)
         # PH: end
 
         self.model.eval()
