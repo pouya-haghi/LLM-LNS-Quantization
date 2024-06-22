@@ -340,126 +340,126 @@ class HuggingFaceAutoLM(BaseLM):
         # # IN YOUR HOOK, YOU HAVE TO USE .CLONE OF THE ARGUMNETS AND THEN MODIFY IT AND FINALLY RETURN IT. IT DOESNT WORK WITHOUT CLONE (IT HAS TO BE OUT OF PLACE COMPUTATION, NOT IN-PLACE)
 
         # # Create a 32-bit float tensor 3 bit mantissa, 4 bit exponent
-        num_bit_exponent = 4
-        num_bit_mantissa  = 3
-        # num_bit_exponent = 5
-        # num_bit_mantissa  = 2
-        offset = torch.tensor(2**(num_bit_exponent-1))
-        scale = torch.tensor(2 ** num_bit_mantissa)
-        threshold_clamp = 2**(num_bit_exponent-1)
-        threshold_up = float(2**threshold_clamp)
-        threshold_down = float(2**-(threshold_clamp))
+        # num_bit_exponent = 4
+        # num_bit_mantissa  = 3
+        # # num_bit_exponent = 5
+        # # num_bit_mantissa  = 2
+        # offset = torch.tensor(2**(num_bit_exponent-1))
+        # scale = torch.tensor(2 ** num_bit_mantissa)
+        # threshold_clamp = 2**(num_bit_exponent-1)
+        # threshold_up = float(2**threshold_clamp)
+        # threshold_down = float(2**-(threshold_clamp))
 
-        threshold_up = threshold_up/2
-        threshold_down = threshold_down*10
+        # threshold_up = threshold_up/2
+        # threshold_down = threshold_down*10
 
-        # float32_tensor = torch.tensor(3.14159, dtype=torch.float32)
+        # # float32_tensor = torch.tensor(3.14159, dtype=torch.float32)
 
-        # # Extract sign, exponent, and mantissa bits from the 32-bit float
-        # # sign_bit = float32_tensor.sign()
-        # exponent_bits = torch.floor(torch.log2(torch.abs(float32_tensor))) + offset
-        # exponent = torch.pow(2, (exponent_bits - offset))
-        # mantissa_bits = torch.round(((float32_tensor / exponent) - 1) * scale)
-        # apx_float = ((mantissa_bits/scale) + 1) * exponent
+        # # # Extract sign, exponent, and mantissa bits from the 32-bit float
+        # # # sign_bit = float32_tensor.sign()
+        # # exponent_bits = torch.floor(torch.log2(torch.abs(float32_tensor))) + offset
+        # # exponent = torch.pow(2, (exponent_bits - offset))
+        # # mantissa_bits = torch.round(((float32_tensor / exponent) - 1) * scale)
+        # # apx_float = ((mantissa_bits/scale) + 1) * exponent
 
-        # For keeping track of activations:
-        class ReferenceCounter:
-            def __init__(self):
-                self.count = 0
-                self.ours_std = torch.tensor(0.0, dtype=torch.float32)
-                self.true_std = torch.tensor(0.0, dtype=torch.float32)
-            def increase(self):
-                self.count += 1
-            def get_count(self):
-                return self.count
+        # # For keeping track of activations:
+        # class ReferenceCounter:
+        #     def __init__(self):
+        #         self.count = 0
+        #         self.ours_std = torch.tensor(0.0, dtype=torch.float32)
+        #         self.true_std = torch.tensor(0.0, dtype=torch.float32)
+        #     def increase(self):
+        #         self.count += 1
+        #     def get_count(self):
+        #         return self.count
 
-        counter = ReferenceCounter()
-        list_output_activation = {}
+        # counter = ReferenceCounter()
+        # list_output_activation = {}
 
 
-        class STEFunction_structured(torch.autograd.Function):
-            """ define straight through estimator with overrided gradient (gate) """
-            @staticmethod
-            def forward(ctx, input):
-                # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
-                # output = input.clone()
-                # print("counter", counter.get_count())
-                # with open('output.txt', 'a') as file:
-                #     file.write("counter: " + str(counter.get_count())+ "\n")
-                if isinstance(input, tuple):
-                    # Clone each tensor in the tuple
-                    # for t in input:
-                    #     print("tuple", t.shape)
-                    # print("from tuple")
-                    # with open('output.txt', 'a') as file:
-                    #     file.write("from tuple")
-                    output = tuple(t.clone() for t in input)
-                    # if counter.get_count() < 10969:
-                    #     for h in output:
-                    #         counter.ours_std += torch.std(h).cpu()
-                    #     with open('output_ours.txt', 'a') as file:
-                    #         file.write("sum (std): " + str(counter.ours_std)+ "\n")
-                    # for z in output:
-                    #     # print("std", z)
-                    #     counter.true_std += torch.std(z).cpu()
-                    # with open('output_true.txt', 'a') as file:
-                    #     file.write("sum (std): " + str(counter.true_std)+ "\n")
-                    output = tuple(torch.where(t < 0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
-                    output = tuple(((torch.round(((t / torch.pow(2, (torch.floor(torch.log2(torch.abs(t)))))) - 1) * scale)/scale) + 1) * torch.pow(2, (torch.floor(torch.log2(torch.abs(t))))) for t in output)
-                    return output                
-                else:
-                    # If input is not a tuple, clone it
-                    # print(input.shape)
-                    output = input.clone()
-                    # print("std", output)
-                    # if counter.get_count() < 10969:
-                    #     counter.ours_std += torch.std(output).cpu()
-                    #     with open('output_ours.txt', 'a') as file:
-                    #         file.write("sum (std): " + str(counter.ours_std)+ "\n")
-                    # counter.true_std += torch.std(output).cpu()
-                    # with open('output_true.txt', 'a') as file:
-                    #     file.write("sum (std): " + str(counter.true_std)+ "\n")
-                    # print(output.dtype)
-                    # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
-                    clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
-                    output = torch.where(output<0, -clamped_output, clamped_output)
+        # class STEFunction_structured(torch.autograd.Function):
+        #     """ define straight through estimator with overrided gradient (gate) """
+        #     @staticmethod
+        #     def forward(ctx, input):
+        #         # ctx.save_for_backward(input.clone()) # if you want to use input during backward calculation
+        #         # output = input.clone()
+        #         # print("counter", counter.get_count())
+        #         # with open('output.txt', 'a') as file:
+        #         #     file.write("counter: " + str(counter.get_count())+ "\n")
+        #         if isinstance(input, tuple):
+        #             # Clone each tensor in the tuple
+        #             # for t in input:
+        #             #     print("tuple", t.shape)
+        #             # print("from tuple")
+        #             # with open('output.txt', 'a') as file:
+        #             #     file.write("from tuple")
+        #             output = tuple(t.clone() for t in input)
+        #             # if counter.get_count() < 10969:
+        #             #     for h in output:
+        #             #         counter.ours_std += torch.std(h).cpu()
+        #             #     with open('output_ours.txt', 'a') as file:
+        #             #         file.write("sum (std): " + str(counter.ours_std)+ "\n")
+        #             # for z in output:
+        #             #     # print("std", z)
+        #             #     counter.true_std += torch.std(z).cpu()
+        #             # with open('output_true.txt', 'a') as file:
+        #             #     file.write("sum (std): " + str(counter.true_std)+ "\n")
+        #             output = tuple(torch.where(t < 0, -torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up), torch.clamp(torch.abs(t), min=threshold_down, max=threshold_up)) for t in output)
+        #             output = tuple(((torch.round(((t / torch.pow(2, (torch.floor(torch.log2(torch.abs(t)))))) - 1) * scale)/scale) + 1) * torch.pow(2, (torch.floor(torch.log2(torch.abs(t))))) for t in output)
+        #             return output                
+        #         else:
+        #             # If input is not a tuple, clone it
+        #             # print(input.shape)
+        #             output = input.clone()
+        #             # print("std", output)
+        #             # if counter.get_count() < 10969:
+        #             #     counter.ours_std += torch.std(output).cpu()
+        #             #     with open('output_ours.txt', 'a') as file:
+        #             #         file.write("sum (std): " + str(counter.ours_std)+ "\n")
+        #             # counter.true_std += torch.std(output).cpu()
+        #             # with open('output_true.txt', 'a') as file:
+        #             #     file.write("sum (std): " + str(counter.true_std)+ "\n")
+        #             # print(output.dtype)
+        #             # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
+        #             clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
+        #             output = torch.where(output<0, -clamped_output, clamped_output)
 
-                    exponent_bits = torch.floor(torch.log2(torch.abs(output))) + offset
-                    exponent = torch.pow(2, (exponent_bits - offset))
-                    mantissa_bits = torch.round(((output / exponent) - 1) * scale)
-                    output = ((mantissa_bits/scale) + 1) * exponent
-                    return output
+        #             exponent_bits = torch.floor(torch.log2(torch.abs(output))) + offset
+        #             exponent = torch.pow(2, (exponent_bits - offset))
+        #             mantissa_bits = torch.round(((output / exponent) - 1) * scale)
+        #             output = ((mantissa_bits/scale) + 1) * exponent
+        #             return output
 
-            @staticmethod
-            def backward(ctx, grad_output):
-                # # aux1 = ctx.saved_tensors # if you want to use input during backward calculation
-                grad_input = grad_output.clone()
-                return grad_input
-                # # aux1 = ctx.saved_tensors # if you want to use input during backward calculation
-                # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
-                # grad_input = grad_output.clone()
-                # clamped_output = torch.clamp(torch.abs(grad_input), min=threshold_down, max=threshold_up)
-                # grad_input = torch.where(grad_input<0, -clamped_output, clamped_output)
+        #     @staticmethod
+        #     def backward(ctx, grad_output):
+        #         # # aux1 = ctx.saved_tensors # if you want to use input during backward calculation
+        #         grad_input = grad_output.clone()
+        #         return grad_input
+        #         # # aux1 = ctx.saved_tensors # if you want to use input during backward calculation
+        #         # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
+        #         # grad_input = grad_output.clone()
+        #         # clamped_output = torch.clamp(torch.abs(grad_input), min=threshold_down, max=threshold_up)
+        #         # grad_input = torch.where(grad_input<0, -clamped_output, clamped_output)
 
-                # exponent_bits = torch.floor(torch.log2(torch.abs(grad_input))) + offset
-                # exponent = torch.pow(2, (exponent_bits - offset))
-                # mantissa_bits = torch.round(((grad_input / exponent) - 1) * scale)
-                # grad_input = ((mantissa_bits/scale) + 1) * exponent
-                # return grad_input
+        #         # exponent_bits = torch.floor(torch.log2(torch.abs(grad_input))) + offset
+        #         # exponent = torch.pow(2, (exponent_bits - offset))
+        #         # mantissa_bits = torch.round(((grad_input / exponent) - 1) * scale)
+        #         # grad_input = ((mantissa_bits/scale) + 1) * exponent
+        #         # return grad_input
 
-        def activation_hook(module, input, output):
-            output = STEFunction_structured.apply(output)
-            # for keeping track of activations
-            # list_output_activation[str(module.__class__.__name__)+str("_")+str(counter.get_count())] = output #$$$
-            counter.increase() #$$$
-            return output
+        # def activation_hook(module, input, output):
+        #     output = STEFunction_structured.apply(output)
+        #     # for keeping track of activations
+        #     # list_output_activation[str(module.__class__.__name__)+str("_")+str(counter.get_count())] = output #$$$
+        #     counter.increase() #$$$
+        #     return output
 
-        EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
+        # EXCLUDED_ACTIVATIONS = (nn.ReLU, nn.Tanh, nn.GELU, nn.Sigmoid, nn.Softmax, nn.LeakyReLU, nn.PReLU)
 
-        for name, module in self.model.named_modules():
-            if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
-                print(name, module)
-                module.register_forward_hook(activation_hook)
+        # for name, module in self.model.named_modules():
+        #     if not isinstance(module, nn.ModuleList) and not list(module.children()) and "intermediate_act_fn" not in name and not isinstance(module, nn.LayerNorm) and not isinstance(module, nn.Dropout) and not any(isinstance(module, activation) for activation in EXCLUDED_ACTIVATIONS):
+        #         print(name, module)
+        #         module.register_forward_hook(activation_hook)
         # model.model.layers[0].self_attn.q_proj.register_forward_hook(activation_hook)
         # # # PH: end
 
