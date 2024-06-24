@@ -1720,40 +1720,40 @@ class HuggingFaceAutoLM(BaseLM):
         # PH: start dynamic LNS4 with per-vector quant only for weight quantization
         
         # Weight Quantization:
-        num_bit_mantissa = 3 # for 8 bit repr.
-        threshold_mantissa = 2**(num_bit_mantissa-1)
-        threshold_up = float(4**threshold_mantissa)
-        threshold_down = float(4**-(threshold_mantissa))
-        num_frac_low_prec = 0 # number of fractional bits for 8 bit repr.
-        num_frac_high_prec = num_frac_low_prec + 1 # 13
-        scale_low_prec = 4**(num_frac_low_prec)
-        scale_high_prec = 4**(num_frac_high_prec)
-        num_frac_highest_prec = num_frac_high_prec + 4 # for extreme outliers
-        scale_highest_prec = 4**(num_frac_highest_prec)
+        # num_bit_mantissa = 3 # for 8 bit repr.
+        # threshold_mantissa = 2**(num_bit_mantissa-1)
+        # threshold_up = float(4**threshold_mantissa)
+        # threshold_down = float(4**-(threshold_mantissa))
+        # num_frac_low_prec = 0 # number of fractional bits for 8 bit repr.
+        # num_frac_high_prec = num_frac_low_prec + 1 # 13
+        # scale_low_prec = 4**(num_frac_low_prec)
+        # scale_high_prec = 4**(num_frac_high_prec)
+        # num_frac_highest_prec = num_frac_high_prec + 4 # for extreme outliers
+        # scale_highest_prec = 4**(num_frac_highest_prec)
 
-        for name, param in self.model.named_parameters():
-            if "norm" not in name: # Quantize both Linear and Conv
-                output = param.data
-                # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
-                clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
-                output = torch.where(output<0, -clamped_output, clamped_output)
-                # v3:
-                log_x = torch.where(output<0, torch.log2(-output)/2, torch.where(output > 0, torch.log2(output)/2, torch.tensor(-64000.0)))
-                quant_exponent_low_prec = torch.round(log_x * scale_low_prec)/ scale_low_prec # 2**3 - round(+ 0.5)
-                quant_exponent_high_prec = torch.round(log_x * scale_high_prec)/ scale_high_prec # 2**3 - round(+ 0.5)
-                quant_exponent_highest_prec = torch.round(log_x * scale_highest_prec)/ scale_highest_prec # 2**3 - round(+ 0.5)
-                if len(output.shape) == 3: # 3D
-                    max_val = torch.max(log_x, dim=1).values.unsqueeze(1).expand_as(log_x)
-                    quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
-                    output = torch.where(output<0, -(torch.pow(4, quant_exponent)), torch.where(output>0, torch.pow(4, quant_exponent), output))
-                elif len(output.shape) == 2: # 2D
-                    max_val = torch.max(log_x, dim=0).values.unsqueeze(0).expand_as(log_x)
-                    quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
-                    output = torch.where(output<0, -(torch.pow(4, quant_exponent)), torch.where(output>0, torch.pow(4, quant_exponent), output))
-                else:
-                    pass
-                    # print(output.shape)
-                param.data = output # write back
+        # for name, param in self.model.named_parameters():
+        #     if "norm" not in name: # Quantize both Linear and Conv
+        #         output = param.data
+        #         # handling overflow/underflow (b/c of limited # of bits for mantissa) -> sparsify if less than a threshold and report an error message if larger thana threshold
+        #         clamped_output = torch.clamp(torch.abs(output), min=threshold_down, max=threshold_up)
+        #         output = torch.where(output<0, -clamped_output, clamped_output)
+        #         # v3:
+        #         log_x = torch.where(output<0, torch.log2(-output)/2, torch.where(output > 0, torch.log2(output)/2, torch.tensor(-64000.0)))
+        #         quant_exponent_low_prec = torch.round(log_x * scale_low_prec)/ scale_low_prec # 2**3 - round(+ 0.5)
+        #         quant_exponent_high_prec = torch.round(log_x * scale_high_prec)/ scale_high_prec # 2**3 - round(+ 0.5)
+        #         quant_exponent_highest_prec = torch.round(log_x * scale_highest_prec)/ scale_highest_prec # 2**3 - round(+ 0.5)
+        #         if len(output.shape) == 3: # 3D
+        #             max_val = torch.max(log_x, dim=1).values.unsqueeze(1).expand_as(log_x)
+        #             quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
+        #             output = torch.where(output<0, -(torch.pow(4, quant_exponent)), torch.where(output>0, torch.pow(4, quant_exponent), output))
+        #         elif len(output.shape) == 2: # 2D
+        #             max_val = torch.max(log_x, dim=0).values.unsqueeze(0).expand_as(log_x)
+        #             quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
+        #             output = torch.where(output<0, -(torch.pow(4, quant_exponent)), torch.where(output>0, torch.pow(4, quant_exponent), output))
+        #         else:
+        #             pass
+        #             # print(output.shape)
+        #         param.data = output # write back
         # end of weight quantization
 
         self.model.eval()
