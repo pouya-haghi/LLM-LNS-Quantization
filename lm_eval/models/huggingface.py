@@ -1751,7 +1751,8 @@ class HuggingFaceAutoLM(BaseLM):
                     quant_exponent = torch.where(log_x>max_val-5, torch.where(log_x>max_val-3, quant_exponent_highest_prec, quant_exponent_high_prec), quant_exponent_low_prec) # max_val-3 and max_val-5 are thresholds for extreme and moderate outliers (beta nd gamma)
                     output = torch.where(output<0, -(torch.pow(4, quant_exponent)), torch.where(output>0, torch.pow(4, quant_exponent), output))
                 else:
-                    print(output.shape)
+                    pass
+                    # print(output.shape)
                 param.data = output # write back
         # end of weight quantization
 
