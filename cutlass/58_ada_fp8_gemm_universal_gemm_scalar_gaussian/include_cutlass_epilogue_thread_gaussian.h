@@ -108,7 +108,9 @@ public:
 
     for (int i = 0; i < kCount; ++i) {
       ElementCompute x = converted_accumulator[i];
-      intermediate[i] = p1_ * std::exp(-0.5 * std::pow((p2_ - x) / p3_, 2));
+      ElementCompute diff = (p2_ - x) / p3_;
+      // intermediate[i] = p1_ * std::exp(-0.5 * std::pow((p2_ - x) / p3_, 2));
+      intermediate[i] = p1_ * __expf(-0.5f * diff * diff);
     }
 
     return destination_converter(intermediate);
@@ -131,7 +133,9 @@ public:
 
     for (int i = 0; i < kCount; ++i) {
       ElementCompute x = converted_accumulator[i];
-      intermediate[i] = p1_ * std::exp(-0.5 * std::pow((p2_ - x) / p3_, 2));
+      ElementCompute diff = (p2_ - x) / p3_;
+      intermediate[i] = p1_ * __expf(-0.5f * diff * diff);
+      // intermediate[i] = p1_ * std::exp(-0.5 * std::pow((p2_ - x) / p3_, 2));
     }
 
     return destination_converter(intermediate);
