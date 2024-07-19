@@ -106,6 +106,13 @@ public:
     // Perform the Gaussian function
     FragmentCompute intermediate;
 
+    // PH: start
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        printf("Maximum value of threadIdx.x (its size): %d\n", blockDim.x - 1);
+        printf("KCount is: %d\n", kCount);
+    }
+    // PH: end
+
     for (int i = 0; i < kCount; ++i) {
       ElementCompute x = converted_accumulator[i];
       ElementCompute diff = (p2_ - x) / p3_;
@@ -130,6 +137,13 @@ public:
 
     // Perform the Gaussian function
     FragmentCompute intermediate;
+
+    // PH: start
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        printf("Maximum value of threadIdx.x (its size): %d\n", blockDim.x - 1);
+        printf("KCount is: %d\n", kCount);
+    }
+    // PH: end
 
     for (int i = 0; i < kCount; ++i) {
       ElementCompute x = converted_accumulator[i];
