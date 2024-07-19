@@ -107,10 +107,10 @@ public:
     FragmentCompute intermediate;
 
     // PH: start
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-        printf("Maximum value of threadIdx.x (its size): %d\n", blockDim.x - 1);
-        printf("KCount is: %d\n", kCount);
-    }
+    // if (threadIdx.x == 0 && blockIdx.x == 0) {
+    //     printf("Maximum value of threadIdx.x (its size): %d\n", blockDim.x - 1);
+    //     printf("KCount is: %d\n", kCount);
+    // }
     // PH: end
 
     for (int i = 0; i < kCount; ++i) {
@@ -139,10 +139,10 @@ public:
     FragmentCompute intermediate;
 
     // PH: start
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-        printf("Maximum value of threadIdx.x (its size): %d\n", blockDim.x - 1);
-        printf("KCount is: %d\n", kCount);
-    }
+    // if (threadIdx.x == 0 && blockIdx.x == 0) {
+    //     printf("Maximum value of threadIdx.x (its size): %d\n", blockDim.x - 1);
+    //     printf("KCount is: %d\n", kCount);
+    // }
     // PH: end
 
     for (int i = 0; i < kCount; ++i) {
