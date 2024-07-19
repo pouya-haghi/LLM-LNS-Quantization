@@ -151,7 +151,9 @@ public:
     // Convert to destination numeric type
     ElementCompute converted_accumulator = accumulator_converter(accumulator);
     ElementCompute x = converted_accumulator;
-    ElementCompute result = p1_ * std::exp(-0.5 * std::pow((p2_ - x) / p3_, 2));
+    ElementCompute diff = (p2_ - x) / p3_;
+    ElementCompute result = p1_ * __expf(-0.5f * diff * diff);
+    // ElementCompute result = p1_ * std::exp(-0.5 * std::pow((p2_ - x) / p3_, 2));
     
     return destination_converter(result);
   }
@@ -165,7 +167,9 @@ public:
     // Convert to destination numeric type
     ElementCompute converted_accumulator = accumulator_converter(accumulator);
     ElementCompute x = converted_accumulator;
-    ElementCompute result = p1_ * std::exp(-0.5 * std::pow((p2_ - x) / p3_, 2));
+    ElementCompute diff = (p2_ - x) / p3_;
+    ElementCompute result = p1_ * __expf(-0.5f * diff * diff);
+    // ElementCompute result = p1_ * std::exp(-0.5 * std::pow((p2_ - x) / p3_, 2));
     
     return destination_converter(result);
   }
