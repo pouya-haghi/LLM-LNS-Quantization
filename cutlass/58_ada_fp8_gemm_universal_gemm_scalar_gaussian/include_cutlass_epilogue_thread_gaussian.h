@@ -111,10 +111,17 @@ public:
     //     printf("Maximum value of threadIdx.x (its size): %d\n", blockDim.x - 1);
     //     printf("KCount is: %d\n", kCount);
     // }
+    __shared__ ElementCompute shared_data[kCount];
+    int tid = threadIdx.x;
+    if (tid < kCount) {
+      shared_data[tid] = converted_accumulator[tid];
+    }
+    __syncthreads();
     // PH: end
 
     for (int i = 0; i < kCount; ++i) {
-      ElementCompute x = converted_accumulator[i];
+      ElementCompute x = shared_data[i];
+      // ElementCompute x = converted_accumulator[i];
       ElementCompute diff = (p2_ - x) / p3_;
       // intermediate[i] = p1_ * std::exp(-0.5 * std::pow((p2_ - x) / p3_, 2));
       intermediate[i] = p1_ * __expf(-0.5f * diff * diff);
@@ -143,6 +150,12 @@ public:
     //     printf("Maximum value of threadIdx.x (its size): %d\n", blockDim.x - 1);
     //     printf("KCount is: %d\n", kCount);
     // }
+    __shared__ ElementCompute shared_data[kCount];
+    int tid = threadIdx.x;
+    if (tid < kCount) {
+      shared_data[tid] = converted_accumulator[tid];
+    }
+    __syncthreads();
     // PH: end
 
     for (int i = 0; i < kCount; ++i) {
