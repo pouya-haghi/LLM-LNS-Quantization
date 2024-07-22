@@ -159,9 +159,9 @@ struct TestbedRunner {
   cutlass::HostTensor<typename Gemm::ElementC, typename Gemm::LayoutC> tensor_Vector;
   cutlass::HostTensor<ElementAccumulator, typename Gemm::LayoutC> tmp_D;
   cutlass::HostTensor<typename Gemm::ElementC, typename Gemm::LayoutC> reference_D;
-  cutlass::HostTensor<ElementCompute, Layout> tensor_p1(problem_size);
-  cutlass::HostTensor<ElementCompute, Layout> tensor_p2(problem_size);
-  cutlass::HostTensor<ElementCompute, Layout> tensor_p3(problem_size);
+  cutlass::HostTensor<ElementAccumulator, cutlass::layout::RowMajor> tensor_p1;
+  cutlass::HostTensor<ElementAccumulator, cutlass::layout::RowMajor> tensor_p2;
+  cutlass::HostTensor<ElementAccumulator, cutlass::layout::RowMajor> tensor_p3;
 
   TestbedRunner(
     cutlass::Distribution::Kind init_A_ = cutlass::Distribution::Uniform,
@@ -229,6 +229,9 @@ struct TestbedRunner {
     tensor_Vector.resize({1, options.problem_size.n()});
     reference_D.resize(options.problem_size.mn(), false);
     tmp_D.resize(options.problem_size.mn(), false);
+    tensor_p1.resize(options.problem_size.mn());
+    tensor_p2.resize(options.problem_size.mn());
+    tensor_p3.resize(options.problem_size.mn());
 
     initialize_tensor(tensor_A.host_view(), init_A, seed + 2019);
     initialize_tensor(tensor_B.host_view(), init_B, seed + 2018);
