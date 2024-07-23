@@ -697,6 +697,8 @@ public:
 
     // Post-processing step
     int element_count = Mma::Shape::kM * Mma::Shape::kN;
+    int thread_id = threadIdx.x;
+    int total_threads = blockDim.x;
     // int bx = blockDim.x;
     // int by = blockDim.y;
     // int bz = blockDim.z;
@@ -704,8 +706,8 @@ public:
     // printf("elementcount is: %d\n", element_count);
     // printf("blockdimx, bloxkdimy, blockdimz, %d, %d, %d\n", bx, by, bz);
 
-
-    for (int i = 0; i < element_count; ++i) {
+      for (int i = thread_id; i < element_count; i += total_threads) {
+    // for (int i = 0; i < element_count; ++i) {
       float x = static_cast<float>(ptr_D[i]);
       float diff = (params.p2_[i] - x) / params.p3_[i];
       ptr_D[i] = static_cast<ElementC>(params.p1_[i] * __expf(-0.5f * diff * diff));
