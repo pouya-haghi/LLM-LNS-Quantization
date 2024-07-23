@@ -697,9 +697,9 @@ public:
 
     // Post-processing step
     int element_count = Mma::Shape::kM * Mma::Shape::kN;
-    int bx = blockDim.x;
-    int by = blockDim.y;
-    int bz = blockDim.z;
+    // int bx = blockDim.x;
+    // int by = blockDim.y;
+    // int bz = blockDim.z;
 
     // printf("elementcount is: %d\n", element_count);
     // printf("blockdimx, bloxkdimy, blockdimz, %d, %d, %d\n", bx, by, bz);
