@@ -440,6 +440,9 @@ typename Gemm::Arguments arguments{
   tensor_B.layout().stride(0),
   tensor_C.layout().stride(0),
   tensor_D.layout().stride(0),
+  nullptr,
+  nullptr,
+  nullptr,
   tensor_p1.device_data(), 
   tensor_p2.device_data(), 
   tensor_p3.device_data()
