@@ -701,8 +701,8 @@ public:
     int by = blockDim.y;
     int bz = blockDim.z;
 
-    printf("elementcount is: %d\n", element_count);
-    printf("blockdimx, bloxkdimy, blockdimz, %d, %d, %d\n", bx, by, bz);
+    // printf("elementcount is: %d\n", element_count);
+    // printf("blockdimx, bloxkdimy, blockdimz, %d, %d, %d\n", bx, by, bz);
 
 
     for (int i = 0; i < element_count; ++i) {
