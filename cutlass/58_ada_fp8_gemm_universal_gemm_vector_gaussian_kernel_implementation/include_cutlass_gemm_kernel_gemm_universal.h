@@ -697,8 +697,8 @@ public:
 
     // Post-processing step
     int element_count = Mma::Shape::kM * Mma::Shape::kN;
-    int thread_id = threadIdx.x;
-    int total_threads = blockDim.x;
+    // int thread_id = threadIdx.x;
+    int total_threads = blockDim.x * blockDim.y * gridDim.x * gridDim.y;
     // int bx = blockDim.x;
     // int by = blockDim.y;
     // int bz = blockDim.z;
@@ -706,12 +706,29 @@ public:
     // printf("elementcount is: %d\n", element_count);
     // printf("blockdimx, bloxkdimy, blockdimz, %d, %d, %d\n", bx, by, bz);
 
-      for (int i = thread_id; i < element_count; i += total_threads) {
-    // for (int i = 0; i < element_count; ++i) {
-      float x = static_cast<float>(ptr_D[i]);
-      float diff = (params.p2_[i] - x) / params.p3_[i];
-      ptr_D[i] = static_cast<ElementC>(params.p1_[i] * __expf(-0.5f * diff * diff));
+  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
+  int max_col = blockDim.x*gridDim.x;
+  int idx = row * max_col + col;
+  int glob_idx;
+
+  // Perform computation if within matrix bounds
+  if (idx < element_count) {
+    for (int iter = 0; iter < element_count/total_threads; iter++){
+      glob_idx = idx + (iter*total_threads);
+      float x = static_cast<float>(ptr_D[glob_idx]);
+      float diff = (params.p2_[glob_idx] - x) / params.p3_[glob_idx];
+      ptr_D[glob_idx] = static_cast<ElementC>(params.p1_[glob_idx] * __expf(-0.5f * diff * diff));
     }
+  }
+
+
+    //   for (int i = thread_id; i < element_count; i += total_threads) {
+    // // for (int i = 0; i < element_count; ++i) {
+    //   float x = static_cast<float>(ptr_D[i]);
+    //   float diff = (params.p2_[i] - x) / params.p3_[i];
+    //   ptr_D[i] = static_cast<ElementC>(params.p1_[i] * __expf(-0.5f * diff * diff));
+    // }
 
     //
     // Release the semaphore
