@@ -148,6 +148,13 @@ public:
     float const * p2_;
     float const * p3_;
 
+    float const * p4_;
+    float const * p5_;
+    float const * p6_;
+
+    float const * p7_;
+    float const * p8_;
+    float const * p9_;
     //
     // Methods
     //
@@ -157,7 +164,9 @@ public:
       ptr_gather_A_indices(nullptr),
       ptr_gather_B_indices(nullptr),
       ptr_scatter_D_indices(nullptr),
-      p1_(nullptr), p2_(nullptr), p3_(nullptr)
+      p1_(nullptr), p2_(nullptr), p3_(nullptr),
+      p4_(nullptr), p5_(nullptr), p6_(nullptr),
+      p7_(nullptr), p8_(nullptr), p9_(nullptr)
     {}
 
     /// constructs an arguments structure
@@ -183,7 +192,13 @@ public:
       int const *ptr_scatter_D_indices = nullptr,
       float const * p1_ = nullptr,
       float const * p2_ = nullptr,
-      float const * p3_ = nullptr)
+      float const * p3_ = nullptr,
+      float const * p4_ = nullptr,
+      float const * p5_ = nullptr,
+      float const * p6_ = nullptr,
+      float const * p7_ = nullptr,
+      float const * p8_ = nullptr,
+      float const * p9_ = nullptr)
     :
       UniversalArgumentsBase(mode, problem_size, batch_count, batch_stride_D),
       epilogue(epilogue),
@@ -192,7 +207,7 @@ public:
       stride_a(stride_a), stride_b(stride_b), stride_c(stride_c), stride_d(stride_d),
       ptr_gather_A_indices(ptr_gather_A_indices), ptr_gather_B_indices(ptr_gather_B_indices),
       ptr_scatter_D_indices(ptr_scatter_D_indices),
-      p1_(p1_), p2_(p2_), p3_(p3_)
+      p1_(p1_), p2_(p2_), p3_(p3_), p4_(p4_), p5_(p5_), p6_(p6_), p7_(p7_), p8_(p8_), p9_(p9_)
     {
       lda = 0;
       ldb = 0;
@@ -224,7 +239,13 @@ public:
       int const *ptr_scatter_D_indices = nullptr,
       float const * p1_ = nullptr,
       float const * p2_ = nullptr,
-      float const * p3_ = nullptr
+      float const * p3_ = nullptr,
+      float const * p4_ = nullptr,
+      float const * p5_ = nullptr,
+      float const * p6_ = nullptr,
+      float const * p7_ = nullptr,
+      float const * p8_ = nullptr,
+      float const * p9_ = nullptr
     ):
       UniversalArgumentsBase(mode, problem_size, batch_count, batch_stride_D),
       epilogue(epilogue),
@@ -233,7 +254,7 @@ public:
       lda(lda), ldb(ldb), ldc(ldc), ldd(ldd),
       ptr_gather_A_indices(ptr_gather_A_indices), ptr_gather_B_indices(ptr_gather_B_indices),
       ptr_scatter_D_indices(ptr_scatter_D_indices),
-      p1_(p1_), p2_(p2_), p3_(p3_)
+      p1_(p1_), p2_(p2_), p3_(p3_), p4_(p4_), p5_(p5_), p6_(p6_), p7_(p7_), p8_(p8_), p9_(p9_)
     {
       stride_a = make_Coord(lda);
       stride_b = make_Coord(ldb);
@@ -310,6 +331,12 @@ public:
     float const * p1_;
     float const * p2_;
     float const * p3_;
+    float const * p4_;
+    float const * p5_;
+    float const * p6_;
+    float const * p7_;
+    float const * p8_;
+    float const * p9_;
 
     //
     // Host dispatch API
@@ -340,7 +367,7 @@ public:
       ptr_gather_A_indices(const_cast<int *>(args.ptr_gather_A_indices)),
       ptr_gather_B_indices(const_cast<int *>(args.ptr_gather_B_indices)),
       ptr_scatter_D_indices(const_cast<int *>(args.ptr_scatter_D_indices)),
-      p1_(args.p1_), p2_(args.p2_), p3_(args.p3_)
+      p1_(args.p1_), p2_(args.p2_), p3_(args.p3_), p4_(args.p4_), p5_(args.p5_), p6_(args.p6_), p7_(args.p7_), p8_(args.p8_), p9_(args.p9_)
     {}
 
     /// Lightweight update given a subset of arguments.
@@ -368,6 +395,9 @@ public:
       p1_ = args.p1_;
       p2_ = args.p2_;
       p3_ = args.p3_;
+      p4_ = args.p4_;
+      p5_ = args.p5_;
+      p6_ = args.p6_;
     }
 
   };
@@ -706,29 +736,26 @@ public:
     // printf("elementcount is: %d\n", element_count);
     // printf("blockdimx, bloxkdimy, blockdimz, %d, %d, %d\n", bx, by, bz);
 
-  int row = blockIdx.y * blockDim.y + threadIdx.y;
-  int col = blockIdx.x * blockDim.x + threadIdx.x;
-  int max_col = blockDim.x*gridDim.x;
-  int idx = row * max_col + col;
-  int glob_idx;
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    int max_col = blockDim.x*gridDim.x;
+    int idx = row * max_col + col;
+    int glob_idx;
+    float x;
+    float diff1, diff2, diff3;
+    float const k1 = 0.98f;
 
-  // Perform computation if within matrix bounds
-  if (idx < element_count) {
-    for (int iter = 0; iter < element_count/total_threads; iter++){
-      glob_idx = idx + (iter*total_threads);
-      float x = static_cast<float>(ptr_D[glob_idx]);
-      float diff = (params.p2_[glob_idx] - x) / params.p3_[glob_idx];
-      ptr_D[glob_idx] = static_cast<ElementC>(params.p1_[glob_idx] * __expf(-0.5f * diff * diff));
+    // Perform computation if within matrix bounds
+    if (idx < element_count) {
+      for (int iter = 0; iter < element_count/total_threads; iter++){
+        glob_idx = idx + (iter*total_threads);
+        x = static_cast<float>(ptr_D[glob_idx]);
+        diff1 = (params.p2_[glob_idx] - x) / params.p3_[glob_idx];
+        diff2 = (params.p5_[glob_idx] - x) / params.p6_[glob_idx];
+        diff3 = (params.p8_[glob_idx] - x) / params.p9_[glob_idx];
+        ptr_D[glob_idx] = static_cast<ElementC>((k1*x) + (params.p1_[glob_idx] * __expf(-0.5f * diff1 * diff1)) + (params.p4_[glob_idx] * __expf(-0.5f * diff2 * diff2)) + (params.p7_[glob_idx] * __expf(-0.5f * diff3 * diff3)));
+      }
     }
-  }
-
-
-    //   for (int i = thread_id; i < element_count; i += total_threads) {
-    // // for (int i = 0; i < element_count; ++i) {
-    //   float x = static_cast<float>(ptr_D[i]);
-    //   float diff = (params.p2_[i] - x) / params.p3_[i];
-    //   ptr_D[i] = static_cast<ElementC>(params.p1_[i] * __expf(-0.5f * diff * diff));
-    // }
 
     //
     // Release the semaphore
