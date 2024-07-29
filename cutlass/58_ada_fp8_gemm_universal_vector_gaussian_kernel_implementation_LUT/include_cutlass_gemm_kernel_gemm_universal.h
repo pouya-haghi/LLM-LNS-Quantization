@@ -727,9 +727,9 @@ public:
     int max_block_size = blockDim.x * blockDim.y;
     int range_lo = -4;
     int range_hi = 4;
-    // int scale  = shared_mem_size / (range_hi - range_lo);
-    ElementC scale  = static_cast<ElementC>(shared_mem_size / (range_hi - range_lo));
-    ElementC range_lo_cast = static_cast<ElementC>(range_lo);
+    int scale  = shared_mem_size / (range_hi - range_lo);
+    // ElementC scale  = static_cast<ElementC>(shared_mem_size / (range_hi - range_lo));
+    // ElementC range_lo_cast = static_cast<ElementC>(range_lo);
     extern __shared__ float shared_lookup_table[]; // [shared_mem_size]
 
     // Copy lookup table to shared memory (parallelize loading to shared memory)
@@ -751,7 +751,7 @@ public:
             glob_idx = idx + (iter * total_threads);
 
             // Use the lookup table
-            int lookup_idx = static_cast<int>((ptr_D[glob_idx] + range_lo_cast) * scale);
+            int lookup_idx = static_cast<int>((ptr_D[glob_idx] + range_lo) * scale); // no need to type conversion for range_lo and scale
             if (lookup_idx < shared_mem_size && lookup_idx >= 0) {
                 ptr_D[glob_idx] = static_cast<ElementC>(shared_lookup_table[lookup_idx]);
                 // ptr_D[glob_idx] = static_cast<ElementC>(0.46f);
