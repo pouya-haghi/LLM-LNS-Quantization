@@ -169,6 +169,14 @@ struct TestbedRunner {
   cutlass::HostTensor<ElementAccumulator, cutlass::layout::RowMajor> tensor_p1;
   cutlass::HostTensor<ElementAccumulator, cutlass::layout::RowMajor> tensor_p2;
   cutlass::HostTensor<ElementAccumulator, cutlass::layout::RowMajor> tensor_p3;
+  cutlass::HostTensor<ElementAccumulator, cutlass::layout::RowMajor> tensor_p4;
+  cutlass::HostTensor<ElementAccumulator, cutlass::layout::RowMajor> tensor_p5;
+  cutlass::HostTensor<ElementAccumulator, cutlass::layout::RowMajor> tensor_p6;
+  cutlass::HostTensor<ElementAccumulator, cutlass::layout::RowMajor> tensor_p7;
+  cutlass::HostTensor<ElementAccumulator, cutlass::layout::RowMajor> tensor_p8;
+  cutlass::HostTensor<ElementAccumulator, cutlass::layout::RowMajor> tensor_p9;
+
+
 
   TestbedRunner(
     cutlass::Distribution::Kind init_A_ = cutlass::Distribution::Uniform,
@@ -239,6 +247,12 @@ struct TestbedRunner {
     tensor_p1.resize(options.problem_size.mn());
     tensor_p2.resize(options.problem_size.mn());
     tensor_p3.resize(options.problem_size.mn());
+    tensor_p4.resize(options.problem_size.mn());
+    tensor_p5.resize(options.problem_size.mn());
+    tensor_p6.resize(options.problem_size.mn());
+    tensor_p7.resize(options.problem_size.mn());
+    tensor_p8.resize(options.problem_size.mn());
+    tensor_p9.resize(options.problem_size.mn());
 
     initialize_tensor(tensor_A.host_view(), init_A, seed + 2019);
     initialize_tensor(tensor_B.host_view(), init_B, seed + 2018);
@@ -247,6 +261,12 @@ struct TestbedRunner {
     initialize_tensor(tensor_p1.host_view(), cutlass::Distribution::Uniform, seed + 2021);
     initialize_tensor(tensor_p2.host_view(), cutlass::Distribution::Uniform, seed + 2022);
     initialize_tensor(tensor_p3.host_view(), cutlass::Distribution::Uniform, seed + 2023);
+    initialize_tensor(tensor_p4.host_view(), cutlass::Distribution::Uniform, seed + 2024);
+    initialize_tensor(tensor_p5.host_view(), cutlass::Distribution::Uniform, seed + 2025);
+    initialize_tensor(tensor_p6.host_view(), cutlass::Distribution::Uniform, seed + 2026);
+    initialize_tensor(tensor_p7.host_view(), cutlass::Distribution::Uniform, seed + 2027);
+    initialize_tensor(tensor_p8.host_view(), cutlass::Distribution::Uniform, seed + 2028);
+    initialize_tensor(tensor_p9.host_view(), cutlass::Distribution::Uniform, seed + 2029);
 
     cutlass::Coord<2> origin(0);
     tensor_A.host_view().at(origin) = typename Gemm::ElementA(1);
@@ -265,6 +285,12 @@ struct TestbedRunner {
     tensor_p1.sync_device();
     tensor_p2.sync_device();
     tensor_p3.sync_device();
+    tensor_p4.sync_device();
+    tensor_p5.sync_device();
+    tensor_p6.sync_device();
+    tensor_p7.sync_device();
+    tensor_p8.sync_device();
+    tensor_p9.sync_device();
   }
 
   bool compare_reference(const Options& options) {
@@ -445,7 +471,13 @@ typename Gemm::Arguments arguments{
   nullptr,
   tensor_p1.device_data(), 
   tensor_p2.device_data(), 
-  tensor_p3.device_data()
+  tensor_p3.device_data(),
+  tensor_p4.device_data(), 
+  tensor_p5.device_data(), 
+  tensor_p6.device_data(),
+  tensor_p7.device_data(), 
+  tensor_p8.device_data(), 
+  tensor_p9.device_data()
 };
 
 
