@@ -177,11 +177,11 @@ __global__ void InitializeMatrix_kernel(
 cudaError_t InitializeMatrix(float *matrix, int rows, int columns, int seed = 0) {
 
   dim3 block(256, 1);
-  // dim3 grid(
-  //   (rows + block.x - 1) / block.x,
-  //   (columns + block.y - 1) / block.y
-  // );
-  dim3 grid(8, 4);
+  dim3 grid(
+    (rows + block.x - 1) / block.x,
+    (columns + block.y - 1) / block.y
+  );
+  // dim3 grid(8, 4);
 
   InitializeMatrix_kernel<<< grid, block >>>(matrix, rows, columns, seed);
 
@@ -271,11 +271,11 @@ cudaError_t ReferenceGemm(
   int ldc) {
 
   dim3 block(256, 1);
-  // dim3 grid(
-  //   (M + block.x - 1) / block.x,
-  //   (N + block.y - 1) / block.y
-  // );
-  dim3 grid(8, 4);
+  dim3 grid(
+    (M + block.x - 1) / block.x,
+    (N + block.y - 1) / block.y
+  );
+  // dim3 grid(8, 4);
 
   ReferenceGemm_kernel<<< grid, block >>>(M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
 
