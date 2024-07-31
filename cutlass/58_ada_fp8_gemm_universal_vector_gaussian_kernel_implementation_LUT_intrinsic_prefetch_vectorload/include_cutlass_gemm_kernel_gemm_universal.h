@@ -779,9 +779,10 @@ public:
     int max_col = blockDim.x * gridDim.x;
     int idx = row * max_col + col;
     int glob_idx;
+    const int vectorized_lvl = 8;
 
 struct float_e4m3x4 {
-    cutlass::float_e4m3_t x[8];
+    cutlass::float_e4m3_t x[vectorized_lvl];
 };
 
 // Vectorized processing using float_e4m3x4 (4 cutlass::float_e4m3_t at a time)
@@ -789,9 +790,9 @@ if (idx < element_count) {
     int next_idx = idx;
     float_e4m3x4 prefetch_values = *((float_e4m3x4*)&ptr_D[next_idx]);
 
-    for (int iter = 0; iter < element_count / (total_threads * 8); iter++) {
+    for (int iter = 0; iter < element_count / (total_threads * vectorized_lvl); iter++) {
         #pragma unroll
-        for (int j = 0; j < 8; ++j) {
+        for (int j = 0; j < vectorized_lvl; ++j) {
             glob_idx = next_idx + j * total_threads;
             if (glob_idx < element_count) {
                 cutlass::float_e4m3_t prefetch_value = prefetch_values.x[j];
@@ -806,7 +807,7 @@ if (idx < element_count) {
         }
 
         // Move to the next set of iterations and prefetch new values
-        next_idx += 8 * total_threads;
+        next_idx += vectorized_lvl * total_threads;
         if (next_idx < element_count) {
             prefetch_values = *((float_e4m3x4*)&ptr_D[next_idx]);
         }
