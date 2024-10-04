@@ -107,7 +107,7 @@ class HuggingFaceAutoLM(BaseLM):
         bnb_4bit_quant_type: Optional[str] = None,
         bnb_4bit_compute_dtype: Optional[Union[str, torch.dtype]] = None,
         bnb_4bit_use_double_quant: Optional[bool] = False,
-        quant_format: Optional[str] = None, 
+        # quant_format: Optional[str] = None, 
     ):
         """Initializes a HuggingFace `AutoModel` and `AutoTokenizer` for evaluation.
         Args:
@@ -265,11 +265,11 @@ class HuggingFaceAutoLM(BaseLM):
                 load_in_4bit=load_in_4bit,
             )
 
-        self._quant_format = quant_format
-        if self._quant_format == "FP8":
-            print("Helllo")
-        else:
-            print("Bye Byeeee")
+        # self._quant_format = quant_format
+        # if self._quant_format == "FP8":
+        #     print("Helllo")
+        # else:
+        #     print("Bye Byeeee")
         # PH: start
         # # peft_model_id = "pouya-haghi/llama2_finetune_pile"
         # # config = PeftConfig.from_pretrained(peft_model_id)
